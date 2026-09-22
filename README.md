@@ -169,6 +169,67 @@ photo once base64 has taken its 33%. CSV stays for spreadsheets: it has a
 `coverPhoto` column that says `yes` or nothing, so a CSV-restored library at
 least tells you which books need re-photographing.
 
+## Backup to my server
+
+Settings → **Backup to my server** pushes the library and its cover photos to
+`clib-backup` on dellcasa, reachable from anywhere with **nothing installed on
+the phone**.
+
+**Setup is one URL and one key.** There is no username and no login: the key
+*is* the identity. The server maps it to a person and scopes every read and
+write to that person's own directory, so a mis-pasted key fails with a 401
+rather than writing into someone else's library. **Test connection** answers
+*Connected as sarah*, which is how you know it landed right.
+
+| | |
+| --- | --- |
+| URL | `https://dellcasa.tail2b3657.ts.net:8443` — the same for everyone |
+| Key | 32 hex characters, one per person |
+
+Adding a person, on dellcasa: `~/clib-backup/add-user.sh sarah`. It prints the
+key once and `users.json` is re-read on change, so no restart.
+
+### Two phases, so a repeat backup sends nothing
+
+`POST /backup` carries the books, collections and a bare list of photo **ids** —
+a few hundred KB. The server replies with the ids it does not already hold, and
+only those JPEGs are then `PUT` one at a time. The first backup uploads
+everything; every one after that uploads ~0 bytes of image, which matters over
+a relay.
+
+### Guards worth knowing about
+
+- **Shrink refusal.** A backup holding less than half the books of the one on
+  the server comes back `409`, and the app asks before forcing it. This is the
+  only thing standing between an auto-backup and quietly overwriting a good
+  library with an empty one after the app's data gets cleared — or a tablet
+  nobody has opened in a month syncing over a phone's newer copy.
+- **The API key never leaves in an export.** `exportableSettings()` strips it,
+  because a JSON export lands in Downloads and gets mailed around.
+- **Auto-backup is deliberately quiet**: debounced 90 s after a change, at most
+  hourly, skipped when offline and retried on `online`, checked once at startup
+  if a day has passed. Failures only change the status line until a whole week
+  has gone by with no success — silence is the bigger risk by then.
+
+### Transport
+
+**Tailscale Funnel**, which needs nothing on the client. `tailscale funnel
+--bg --https=8443 http://localhost:8100` inside the `tailscale` container. Note
+that Funnel is **per-port**: 443 (Vaultwarden) and 8096/8098 stay tailnet-only
+and were verified unreachable from off-tailnet while 8443 answers.
+
+Funnel's public DNS record took about twenty minutes to appear after first
+enabling it. `NXDOMAIN` right after running the command is not a failure —
+check again before changing anything.
+
+The service is at `~/clib-backup` rather than `/DATA/AppData/` because creating
+a directory there needs root and this box has no passwordless sudo. It runs as
+`user: "1000:1000"`, without which every backup file lands root-owned and you
+cannot prune or rsync your own data.
+
+**This is off-device, not off-site.** dellcasa is in the same house as the
+phones; it defends against a cleared browser or a lost phone, not a fire.
+
 Import takes either file. It offers merge (skip what you already have),
 add-all (duplicates included) and replace. Replace requires typing `REPLACE`
 and auto-exports the current library **as JSON** first — a CSV safety net would

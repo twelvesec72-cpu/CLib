@@ -185,12 +185,20 @@ main{
 .icon-btn svg{width:21px;height:21px}
 .icon-btn.plain{border-color:transparent;background:transparent}
 
-input[type=text],input[type=search],input[type=number],input[type=url],select,textarea{
+input[type=text],input[type=search],input[type=number],input[type=url],
+input[type=password],select,textarea{
   width:100%; min-height:var(--tap); padding:9px 11px;
   background:var(--surface); border:1px solid var(--border);
   border-radius:var(--radius-sm); outline:none;
 }
 textarea{min-height:76px; resize:vertical}
+/* Chrome paints its own opaque background over an autofilled field, which on
+   the dark theme reads as a broken white box. Only an inset shadow overrides it. */
+input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus{
+  -webkit-text-fill-color:var(--text);
+  -webkit-box-shadow:0 0 0 1000px var(--surface) inset;
+  caret-color:var(--text);
+}
 input:focus,select:focus,textarea:focus{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
 label.field{display:block; margin-bottom:12px}
 label.field > span{display:block; font-size:12.5px; font-weight:650; color:var(--muted); margin-bottom:5px; letter-spacing:.01em}
@@ -198,6 +206,8 @@ label.field > span{display:block; font-size:12.5px; font-weight:650; color:var(-
 .row > *{flex:1; min-width:0}
 .hint{font-size:12.5px; color:var(--muted); margin:6px 0 0}
 .flabel{display:block; font-size:12.5px; font-weight:650; color:var(--muted); margin-bottom:5px; letter-spacing:.01em}
+.rowline{display:flex; gap:9px; align-items:center; font-size:14px; line-height:1.3}
+.rowline input[type=checkbox]{width:19px; height:19px; flex:none; accent-color:var(--accent)}
 
 /* cover editor: the preview at true book proportions, controls beside it */
 .coveredit{display:flex; gap:12px; align-items:flex-start}
@@ -531,6 +541,26 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
     </div>
 
     <div class="card">
+      <h3>Backup to my server</h3>
+      <p>Sends the library and its cover photos to your own server, so losing
+      the phone does not lose the shelf.</p>
+      <label class="field"><span>Server URL</span>
+        <input type="url" id="bkUrl" placeholder="https://example.ts.net:8443"
+               autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+      <label class="field"><span>Your key</span>
+        <input type="password" id="bkKey" placeholder="32 characters"
+               autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+      <div class="row" style="margin-bottom:9px">
+        <button class="btn" id="bkTest">Test connection</button>
+        <button class="btn primary" id="bkNow">Back up now</button>
+      </div>
+      <button class="btn wide" id="bkRestore" style="margin-bottom:9px">Restore from server…</button>
+      <label class="rowline"><input type="checkbox" id="bkAuto">
+        <span>Back up automatically, at most once an hour</span></label>
+      <p class="hint" id="bkStatus">Not set up.</p>
+    </div>
+
+    <div class="card">
       <h3>Storage</h3>
       <div class="meter" id="storageMeter"><i style="width:0%"></i></div>
       <p id="storageText">—</p>
@@ -628,7 +658,12 @@ let collections = [];
 let settings    = {};
 let queue       = [];
 
-const DEFAULT_SETTINGS = { scanMode:'confirm', sort:'dateAdded', theme:'auto', view:'grid' };
+const DEFAULT_SETTINGS = {
+  scanMode:'confirm', sort:'dateAdded', theme:'auto', view:'grid',
+  // offsite backup — the key doubles as the identity, so there is no username
+  backupUrl:'', backupKey:'', backupUser:'', backupAuto:false,
+  backupLastAt:'', backupLastMsg:'', deviceId:''
+};
 
 function loadAll(){
   const v = lsGet(KEY.schema, null);
@@ -641,9 +676,22 @@ function loadAll(){
   collections = arr(lsGet(KEY.collections, [])).filter(c => typeof c === 'string');
   queue       = arr(lsGet(KEY.queue, [])).filter(q => q && typeof q === 'object');
   settings    = Object.assign({}, DEFAULT_SETTINGS, lsGet(KEY.settings, {}) || {});
+  // Identifies this install in the backup snapshot list, so "200 books became
+  // 12" can be traced to the tablet nobody had opened in a month.
+  if(!settings.deviceId){ settings.deviceId = uuid(); saveSettings(); }
+}
+/** A coarse, non-identifying label for the snapshot list. */
+function deviceName(){
+  const ua = navigator.userAgent || '';
+  const kind = /iPad/i.test(ua) ? 'iPad'
+             : /iPhone/i.test(ua) ? 'iPhone'
+             : /Android/i.test(ua) ? 'Android'
+             : /Macintosh/i.test(ua) ? 'Mac'
+             : /Windows/i.test(ua) ? 'Windows' : 'Browser';
+  return kind + ' ' + String(settings.deviceId || '').slice(0, 4);
 }
 const arr = v => Array.isArray(v) ? v : [];
-const saveBooks       = () => lsSet(KEY.books, books);
+const saveBooks       = () => { const ok = lsSet(KEY.books, books); markBackupDirty(); return ok; };
 const saveCollections = () => lsSet(KEY.collections, collections);
 const saveQueue       = () => lsSet(KEY.queue, queue);
 const saveSettings    = () => lsSet(KEY.settings, settings);
@@ -2284,50 +2332,97 @@ function exportCsv(list, name){
   const data = list || books;
   download(name || ('bookshelf-backup-' + today() + '.csv'), booksToCsv(data), 'text/csv');
 }
-/* The full backup. Photographed covers go in as data URLs under their own ids,
-   because they exist nowhere else — lose them and there is no Open Library to
-   fetch them back from. That makes the file big (roughly 55 KB per photo once
-   base64 has had its 33%), which is the price of it being a real restore. */
-async function exportJson(name){
-  let photos = [];
+/* The API key must never leave the device inside a file. An export lands in
+   Downloads and gets mailed around; the key would hand whoever received it
+   write access to the backup server. */
+function exportableSettings(){
+  const s = Object.assign({}, settings);
+  delete s.backupKey;
+  return s;
+}
+
+/** The one place a backup payload is described, so the file export and the
+ *  server push cannot drift apart. `inlinePhotos` decides whether the images
+ *  travel inside the document — a file has to stand alone — or as a bare list
+ *  of ids that the server will ask for separately. */
+async function buildBackupDoc(opts){
+  const inline = !!(opts && opts.inlinePhotos);
+  const ids = [...new Set(books.map(b => b.coverPhotoId).filter(Boolean))];
+  const doc = {
+    app:'clib', schemaVersion:SCHEMA_VERSION, exportedAt:new Date().toISOString(),
+    deviceId: str(settings.deviceId), deviceName: deviceName(),
+    books, collections, settings: exportableSettings(),
+    photoIds: ids
+  };
+  if(!inline) return { doc, photos:0, partial:false };
+
+  /* Photographed covers go in as data URLs because they exist nowhere else —
+     lose them and there is no Open Library to fetch them back from. It costs
+     roughly a third on top in base64, which is the price of the file being a
+     real restore rather than a list of titles. */
+  doc.photos = [];
+  let partial = false;
   let busy = null;
   try{
-    const live = new Set(books.map(b => b.coverPhotoId).filter(Boolean));
-    if(live.size){
-      busy = busyToast('Packing ' + live.size + ' cover photo' + (live.size === 1 ? '' : 's') + '…');
+    if(ids.length){
+      busy = busyToast('Packing ' + ids.length + ' cover photo' + (ids.length === 1 ? '' : 's') + '…');
+      const live = new Set(ids);
       const all = await photoAll();
       for(const rec of all){
         if(!live.has(rec.id) || !rec.blob) continue;
-        photos.push({ id:rec.id, dataUrl: await blobToDataUrl(rec.blob) });
+        doc.photos.push({ id:rec.id, dataUrl: await blobToDataUrl(rec.blob) });
       }
     }
   }catch(err){
     console.warn('photo export failed', err);
-    toast('The cover photos could not be read — the books were exported without them.', 'err', 7000);
+    partial = true;
   }
   if(busy) busy.done();
-  const text = JSON.stringify({
-    app:'clib', schemaVersion:SCHEMA_VERSION, exportedAt:new Date().toISOString(),
-    books, collections, settings, photos
-  });
-  download(name || ('bookshelf-backup-' + today() + '.json'), text, 'application/json');
-  return { photos: photos.length, bytes: text.length };
+  return { doc, photos: doc.photos.length, partial };
 }
 
-/** Put a backup's photos back under their original ids, so the book records
- *  that reference them resolve without any remapping. */
-async function restorePhotos(list){
+async function exportJson(name){
+  const built = await buildBackupDoc({ inlinePhotos:true });
+  if(built.partial)
+    toast('The cover photos could not be read — the books were exported without them.', 'err', 7000);
+  const text = JSON.stringify(built.doc);
+  download(name || ('bookshelf-backup-' + today() + '.json'), text, 'application/json');
+  return { photos: built.photos, bytes: text.length };
+}
+
+/* A restore's photos come either from inside the file or one at a time from
+   the server, so the import path takes a source rather than a list and does
+   not care which it got. */
+function dataUrlPhotoSource(list){
+  const map = new Map();
+  arr(list).forEach(p => {
+    if(p && p.id && typeof p.dataUrl === 'string' && /^data:image\//.test(p.dataUrl))
+      map.set(String(p.id), p.dataUrl);
+  });
+  return { ids:[...map.keys()],
+           load: async id => (await fetch(map.get(id))).blob() };
+}
+function serverPhotoSource(ids){
+  return { ids: arr(ids).map(String),
+           load: async id => {
+             const res = await apiFetch('/photos/' + encodeURIComponent(id));
+             return res.ok ? await res.blob() : null;
+           } };
+}
+
+/** Writes photos back into IndexedDB under their original ids, so the book
+ *  records that reference them resolve without any remapping. */
+async function restorePhotos(source, ids){
   let ok = 0;
-  for(const p of arr(list)){
-    if(!p || !p.id || typeof p.dataUrl !== 'string') continue;
-    if(!/^data:image\//.test(p.dataUrl)) continue;
+  for(const id of arr(ids)){
+    if(!id) continue;
     try{
-      const blob = await (await fetch(p.dataUrl)).blob();
-      await photoPut({ id:String(p.id), blob, bytes:blob.size,
-                       addedAt: str(p.addedAt) || new Date().toISOString() });
-      forgetPhotoUrl(String(p.id));   // drop any cached URL for a stale version
+      const blob = await source.load(id);
+      if(!blob || !blob.size) continue;
+      await photoPut({ id, blob, bytes:blob.size, addedAt:new Date().toISOString() });
+      forgetPhotoUrl(id);          // drop any cached URL for a stale version
       ok++;
-    }catch(err){ console.warn('photo restore failed', p.id, err); }
+    }catch(err){ console.warn('photo restore failed', id, err); }
   }
   return ok;
 }
@@ -2377,7 +2472,7 @@ function startImport(file){
       const incoming = doc.books.filter(b => b && typeof b === 'object').map(normaliseBook);
       if(!incoming.length){ toast('No books in that backup.', 'err'); return; }
       arr(doc.collections).filter(c => typeof c === 'string').forEach(ensureCollection);
-      chooseImportMode(incoming, file.name, arr(doc.photos));
+      chooseImportMode(incoming, file.name, dataUrlPhotoSource(doc.photos));
       return;
     }
     let incoming, marked = 0;
@@ -2389,12 +2484,12 @@ function startImport(file){
       if(hi >= 0) marked = rows.slice(1).filter(r => /^\s*yes\s*$/i.test(r[hi] || '')).length;
     }
     catch(err){ toast(err.message || 'That CSV could not be parsed.', 'err', 6000); return; }
-    chooseImportMode(incoming, file.name, [], marked);
+    chooseImportMode(incoming, file.name, null, marked);
   };
   reader.readAsText(file, 'utf-8');
 }
-function chooseImportMode(incoming, filename, photos, markedNoPhoto){
-  photos = arr(photos);
+function chooseImportMode(incoming, filename, photoSource, markedNoPhoto){
+  const photos = photoSource && photoSource.ids ? photoSource.ids : [];
   const withPhoto = markedNoPhoto || 0;
   const known = new Set();
   books.forEach(b => { if(b.isbn13) known.add('i:' + b.isbn13); known.add('u:' + b.id); });
@@ -2421,15 +2516,18 @@ function chooseImportMode(incoming, filename, photos, markedNoPhoto){
     list.forEach(b => { books.push(b); b.collections.forEach(ensureCollection); });
     saveBooks(); saveCollections();
     closeSheet();
-    if(photos.length){
+    if(photoSource && photos.length){
       // only the photos the kept books actually point at, and only after the
       // records are saved — then sweep, which clears out everything a Replace
       // or a partial merge has just orphaned
-      const need = new Set(list.map(b => b.coverPhotoId).filter(Boolean));
-      const want = photos.filter(p => p && need.has(String(p.id)));
-      const busy = want.length ? busyToast('Restoring ' + want.length + ' cover photo' +
-                                           (want.length === 1 ? '' : 's') + '…') : null;
-      const n = await restorePhotos(want);
+      const have = new Set(photos);
+      const want = [...new Set(list.map(b => b.coverPhotoId).filter(id => id && have.has(id)))];
+      const busy = want.length ? busyToast('Restoring cover 1 of ' + want.length + '…') : null;
+      let n = 0;
+      for(let i = 0; i < want.length; i++){
+        if(busy) busy.set('Restoring cover ' + (i + 1) + ' of ' + want.length + '…');
+        n += await restorePhotos(photoSource, [want[i]]);
+      }
       if(busy) busy.done();
       if(n) verb += ' ' + n + ' cover photo' + (n === 1 ? '' : 's') + ' restored.';
     }
@@ -2455,6 +2553,202 @@ function chooseImportMode(incoming, filename, photos, markedNoPhoto){
     books = [];
     finish(incoming, 'Library replaced with ' + incoming.length + ' books.');
   };
+}
+
+/* ================================================= backup to my server */
+/* One URL and one key. The key IS the identity — the server maps it to a
+   person and scopes every read and write to their own directory — so there is
+   no username to type and no second thing to get wrong. */
+
+class BackupError extends Error {}
+
+function backupCfg(){
+  const url = str(settings.backupUrl).replace(/\/+$/, '');
+  const key = str(settings.backupKey);
+  return { url, key, ok: !!(url && key) };
+}
+
+async function apiFetch(path, opts){
+  const cfg = backupCfg();
+  if(!cfg.ok) throw new BackupError('No backup server configured.');
+  // Only an https page is bound by mixed-content rules; saying so precisely
+  // beats letting the browser fail this with an opaque network error.
+  if(location.protocol === 'https:' && !/^https:\/\//i.test(cfg.url))
+    throw new BackupError('The server URL must start with https:// — a secure page cannot call a plain http one.');
+  const o = Object.assign({ method:'GET', cache:'no-store' }, opts || {});
+  o.headers = Object.assign({ 'X-Api-Key': cfg.key }, o.headers || {});
+  try{
+    return await fetch(cfg.url + path, o);
+  }catch(err){
+    // fetch rejects the same way for DNS, TLS, CORS and being offline, so the
+    // message has to cover all of them rather than guess
+    throw new BackupError('Could not reach the server — check the URL, and that you are online.');
+  }
+}
+/** apiFetch plus the status codes this API actually uses. 409 comes back for
+ *  the caller to handle, because it is a question, not a failure. */
+async function apiJson(path, opts){
+  const res = await apiFetch(path, opts);
+  if(res.status === 401) throw new BackupError('The server did not accept that key.');
+  if(res.status === 429) throw new BackupError('The server is rate-limiting this key — wait a minute.');
+  if(res.status === 507) throw new BackupError('Your space on the backup server is full.');
+  if(res.status === 413) throw new BackupError('That backup is too big for the server to accept.');
+  let body = null;
+  try{ body = await res.json(); }catch(err){}
+  if(!res.ok && res.status !== 409)
+    throw new BackupError(body && body.error ? 'Server said: ' + body.error : 'Server error ' + res.status);
+  return { status: res.status, body };
+}
+
+function backupSince(){
+  const t = Date.parse(settings.backupLastAt || '');
+  return Number.isFinite(t) ? Date.now() - t : Infinity;
+}
+function agoWords(ms){
+  if(!Number.isFinite(ms)) return 'never';
+  const m = Math.round(ms / 60000);
+  if(m < 1) return 'just now';
+  if(m < 60) return m + ' min ago';
+  const h = Math.round(m / 60);
+  if(h < 24) return h + (h === 1 ? ' hour ago' : ' hours ago');
+  const d = Math.round(h / 24);
+  return d + (d === 1 ? ' day ago' : ' days ago');
+}
+
+let backupRunning = false;
+
+/** Two phases: the manifest, then only the covers the server says it lacks.
+ *  A repeat backup therefore uploads almost nothing. */
+async function runBackup(opts){
+  const manual = !!(opts && opts.manual);
+  if(backupRunning) return { skipped:'running' };
+  const cfg = backupCfg();
+  if(!cfg.ok){ if(manual) toast('Set the server URL and key first.', 'err'); return { skipped:'unconfigured' }; }
+  if(navigator.onLine === false){ if(manual) toast('You are offline.', 'err'); return { skipped:'offline' }; }
+
+  backupRunning = true;
+  let busy = manual ? busyToast('Backing up ' + books.length + ' books…') : null;
+  try{
+    const built = await buildBackupDoc({ inlinePhotos:false });
+    const payload = JSON.stringify(built.doc);
+    const post = p => apiJson(p, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: payload });
+
+    let r = await post('/backup');
+    if(r.status === 409){
+      // The server is refusing to let a shrunken library overwrite a bigger
+      // one. This is the guard that stops a cleared app quietly wiping the
+      // only good copy, so it is always a question, never automatic.
+      if(busy){ busy.done(); busy = null; }
+      const b = r.body || {};
+      const ok = await confirmDialog({
+        title:'That would shrink the backup',
+        bodyHtml:'The copy on the server holds <b>' + (b.was || 0) + '</b> book' + (b.was === 1 ? '' : 's') +
+                 '. This device has <b>' + (b.now || 0) + '</b>.' +
+                 (b.lastDevice && b.lastDevice !== settings.deviceId
+                   ? ' It was written by a different device.' : '') +
+                 ' The server keeps dated snapshots, so this is recoverable — but not from here.',
+        confirmLabel:'Replace it anyway', danger:true });
+      if(!ok){ backupRunning = false; return { skipped:'declined' }; }
+      busy = manual ? busyToast('Backing up…') : null;
+      r = await post('/backup?force=1');
+    }
+
+    const missing = arr(r.body && r.body.missingPhotos);
+    let sent = 0, failed = 0;
+    for(let i = 0; i < missing.length; i++){
+      if(busy) busy.set('Uploading cover ' + (i + 1) + ' of ' + missing.length + '…');
+      let rec = null;
+      try{ rec = await photoGet(missing[i]); }catch(err){}
+      if(!rec || !rec.blob) continue;        // gone locally; nothing to send
+      const up = await apiFetch('/photos/' + encodeURIComponent(missing[i]),
+        { method:'PUT', headers:{ 'Content-Type':'image/jpeg' }, body: rec.blob });
+      if(up.ok) sent++;
+      else { failed++; if(up.status === 507) throw new BackupError('Your space on the backup server is full.'); }
+    }
+
+    settings.backupLastAt  = new Date().toISOString();
+    settings.backupUser    = str(r.body && r.body.user) || settings.backupUser;
+    settings.backupLastMsg = books.length + ' book' + (books.length === 1 ? '' : 's') +
+                             (sent ? ', ' + sent + ' cover' + (sent === 1 ? '' : 's') + ' uploaded' : '') +
+                             (failed ? ', ' + failed + ' cover failed' : '');
+    saveSettings();
+    if(busy){ busy.done(); busy = null; }
+    if(manual) toast('Backed up — ' + settings.backupLastMsg + '.', 'ok', 4500);
+    renderSettings();
+    return { ok:true, sent, failed };
+  }catch(err){
+    if(busy) busy.done();
+    const msg = err instanceof BackupError ? err.message : 'Backup failed.';
+    settings.backupLastMsg = msg;
+    saveSettings();
+    if(manual) toast(msg, 'err', 7000);
+    renderSettings();
+    return { ok:false, error:msg };
+  }finally{
+    backupRunning = false;
+  }
+}
+
+/* Auto-backup, deliberately quiet: it must never interrupt someone cataloguing
+   a shelf. Failures only change the status line until a whole week has gone by
+   without a success, which is the point at which silence is the bigger risk. */
+let backupTimer = null;
+function markBackupDirty(){
+  if(!settings.backupAuto || !backupCfg().ok) return;
+  if(backupTimer) clearTimeout(backupTimer);
+  backupTimer = setTimeout(() => { backupTimer = null; maybeAutoBackup(); }, 90000);
+}
+async function maybeAutoBackup(){
+  if(!settings.backupAuto || !backupCfg().ok) return;
+  if(navigator.onLine === false) return;
+  if(backupRunning) return;
+  if(backupSince() < 60 * 60 * 1000) return;     // at most hourly
+  const r = await runBackup({ manual:false });
+  if(r && r.ok === false && backupSince() > 7 * 86400000)
+    toast('Clib has not backed up for a week — check the backup settings.', 'err', 9000);
+}
+
+async function openServerRestore(){
+  let list;
+  const busy = busyToast('Fetching the list…');
+  try{
+    const r = await apiJson('/snapshots');
+    list = arr(r.body && r.body.snapshots);
+  }catch(err){
+    busy.done();
+    toast(err instanceof BackupError ? err.message : 'Could not list the backups.', 'err', 7000);
+    return;
+  }
+  busy.done();
+  if(!list.length){ toast('There are no backups on the server yet.', 'err', 5000); return; }
+
+  openSheet('Restore from server',
+    '<p style="margin:0 0 12px">Backups for <b>' + esc(settings.backupUser || 'this key') +
+    '</b>. Picking one does not overwrite anything yet — you choose merge, add or replace next.</p>' +
+    list.map((s, i) =>
+      '<button class="result" data-i="' + i + '">' +
+      '<div class="meta"><div class="t">' + esc(new Date(s.at).toLocaleString()) + '</div>' +
+      '<div class="a">' + (s.books === null ? '?' : s.books) + ' books · ' +
+      (s.photos || 0) + ' covers · ' + fmtBytes(s.bytes || 0) +
+      (s.device ? ' · ' + esc(s.device) : '') + '</div></div></button>').join(''));
+
+  $$('.result', $('#sheet')).forEach(el => el.onclick = async () => {
+    const snap = list[+el.dataset.i];
+    const b2 = busyToast('Fetching that backup…');
+    try{
+      const r = await apiJson('/snapshots/' + encodeURIComponent(snap.name));
+      const doc = r.body;
+      if(!doc || !Array.isArray(doc.books)) throw new BackupError('That backup has no books in it.');
+      const incoming = doc.books.filter(x => x && typeof x === 'object').map(normaliseBook);
+      if(!incoming.length) throw new BackupError('That backup has no books in it.');
+      arr(doc.collections).filter(c => typeof c === 'string').forEach(ensureCollection);
+      b2.done();
+      chooseImportMode(incoming, 'server backup', serverPhotoSource(doc.photoIds));
+    }catch(err){
+      b2.done();
+      toast(err instanceof BackupError ? err.message : 'Could not fetch that backup.', 'err', 7000);
+    }
+  });
 }
 
 /* ============================================================= settings */
@@ -2487,8 +2781,29 @@ function renderSettings(){
     books.length + ' book' + (books.length === 1 ? '' : 's') +
     (storageBroken ? ' · WRITES ARE FAILING' : '');
   refreshPhotoStats();
+  renderBackupCard();
 
   $('#fTheme').value = settings.theme;
+}
+function renderBackupCard(){
+  const url = $('#bkUrl'); if(!url) return;
+  if(document.activeElement !== url) url.value = settings.backupUrl || '';
+  const key = $('#bkKey');
+  if(document.activeElement !== key) key.value = settings.backupKey || '';
+  $('#bkAuto').checked = !!settings.backupAuto;
+
+  const cfg = backupCfg();
+  const parts = [];
+  if(!cfg.ok) parts.push('Not set up.');
+  else{
+    parts.push(settings.backupUser ? 'Connected as ' + settings.backupUser : 'Key not tested yet');
+    parts.push(settings.backupLastAt ? 'last backup ' + agoWords(backupSince()) : 'never backed up');
+  }
+  if(settings.backupLastMsg) parts.push(settings.backupLastMsg);
+  const el = $('#bkStatus');
+  el.textContent = parts.join(' · ');
+  // a week of silence is the point at which a quiet failure becomes the risk
+  el.style.color = (cfg.ok && backupSince() > 7 * 86400000) ? 'var(--danger)' : '';
 }
 /* Photos are not in the 5 MB meter above and must not be added to it — they
    are in IndexedDB, which has its own, far larger allowance. Reading the
@@ -2641,6 +2956,58 @@ function wireUp(){
     if(f) startImport(f);
   };
 
+  /* ---- backup to my server ---- */
+  const saveBackupField = (el, prop) => {
+    el.onchange = () => {
+      const v = el.value.trim();
+      if(settings[prop] === v) return;
+      settings[prop] = v;
+      settings.backupUser = '';        // a changed URL or key is a different identity
+      saveSettings(); renderBackupCard();
+    };
+  };
+  saveBackupField($('#bkUrl'), 'backupUrl');
+  saveBackupField($('#bkKey'), 'backupKey');
+
+  $('#bkTest').onclick = async () => {
+    $('#bkUrl').dispatchEvent(new Event('change'));
+    $('#bkKey').dispatchEvent(new Event('change'));
+    if(!backupCfg().ok){ toast('Enter the server URL and your key first.', 'err'); return; }
+    const busy = busyToast('Checking…');
+    try{
+      const r = await apiJson('/whoami');
+      const b = r.body || {};
+      settings.backupUser = str(b.user);
+      settings.backupLastMsg = '';
+      saveSettings();
+      busy.done();
+      toast('Connected as ' + (b.user || '?') + ' · ' + (b.snapshots || 0) +
+            ' backup' + (b.snapshots === 1 ? '' : 's') + ' on the server.', 'ok', 5000);
+    }catch(err){
+      busy.done();
+      settings.backupUser = '';
+      settings.backupLastMsg = err instanceof BackupError ? err.message : 'Test failed.';
+      saveSettings();
+      toast(settings.backupLastMsg, 'err', 7000);
+    }
+    renderBackupCard();
+  };
+  $('#bkNow').onclick = () => {
+    $('#bkUrl').dispatchEvent(new Event('change'));
+    $('#bkKey').dispatchEvent(new Event('change'));
+    runBackup({ manual:true });
+  };
+  $('#bkRestore').onclick = () => {
+    if(!backupCfg().ok){ toast('Enter the server URL and your key first.', 'err'); return; }
+    openServerRestore();
+  };
+  $('#bkAuto').onchange = e => {
+    settings.backupAuto = !!e.target.checked;
+    saveSettings();
+    if(settings.backupAuto) markBackupDirty();
+    renderBackupCard();
+  };
+
   $('#fTheme').onchange = e => { settings.theme = e.target.value; saveSettings(); applyTheme(); };
 
   $('#btnClearAll').onclick = async () => {
@@ -2664,6 +3031,8 @@ function wireUp(){
   };
 
   window.addEventListener('offline', () => toast('Offline — your library still works, but lookups will not.', 'err', 4000));
+  // a backup skipped while offline should go the moment the connection is back
+  window.addEventListener('online', () => { maybeAutoBackup(); });
   document.addEventListener('visibilitychange', () => { if(document.hidden && scan.running) stopScan(); });
 }
 
@@ -2690,6 +3059,10 @@ function boot(){
 
   // Off the critical path: clear out any cover photo nothing points at.
   setTimeout(() => { sweepPhotos(); }, 2500);
+
+  // A day without a backup is worth catching on open, since someone who only
+  // opens the app to add a book would otherwise never trip the change timer.
+  setTimeout(() => { if(backupSince() > 24 * 60 * 60 * 1000) maybeAutoBackup(); }, 6000);
 
   /* A photographed cover exists nowhere else — there is no Open Library to
      fetch it back from — and Safari throws away a site's storage after seven
