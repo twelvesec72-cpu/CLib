@@ -1,6 +1,6 @@
 /* Clib service worker.
    BUMP THIS STRING ON EVERY DEPLOY or the phones keep serving the old app. */
-const CACHE = 'clib-v7';
+const CACHE = 'clib-v8';
 const COVERS = 'clib-covers-v1';
 
 const SHELL = [

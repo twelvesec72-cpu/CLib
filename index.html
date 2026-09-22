@@ -197,6 +197,14 @@ label.field > span{display:block; font-size:12.5px; font-weight:650; color:var(-
 .row{display:flex; gap:10px}
 .row > *{flex:1; min-width:0}
 .hint{font-size:12.5px; color:var(--muted); margin:6px 0 0}
+.flabel{display:block; font-size:12.5px; font-weight:650; color:var(--muted); margin-bottom:5px; letter-spacing:.01em}
+
+/* cover editor: the preview at true book proportions, controls beside it */
+.coveredit{display:flex; gap:12px; align-items:flex-start}
+.coveredit .cover{width:86px; flex:none; border-radius:8px}
+.coveredit-side{flex:1; min-width:0; display:flex; flex-direction:column; gap:7px; align-items:stretch}
+.coveredit-side .hint{margin:1px 0 0}
+.coveredit-busy{position:absolute; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.45)}
 
 .card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px; margin-bottom:12px}
 .card h3{font-size:15px; margin-bottom:10px}
@@ -511,19 +519,22 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
 
     <div class="card">
       <h3>Backup</h3>
-      <p>CSV is the only recovery path in this version. Export often.</p>
+      <p>Export is the only recovery path in this version. <b>JSON keeps your
+      photographed covers; CSV does not.</b> Export often.</p>
       <div class="row" style="margin-bottom:9px">
-        <button class="btn primary" id="btnExportCsv">Export CSV</button>
-        <button class="btn" id="btnExportJson">Export JSON</button>
+        <button class="btn primary" id="btnExportJson">Export JSON</button>
+        <button class="btn" id="btnExportCsv">Export CSV</button>
       </div>
-      <button class="btn wide" id="btnImportCsv">Import CSV…</button>
-      <input type="file" id="fileCsv" accept=".csv,text/csv" class="hide">
+      <button class="btn wide" id="btnImportCsv">Import a backup…</button>
+      <input type="file" id="fileCsv" accept=".json,.csv,application/json,text/csv" class="hide">
+      <p class="hint">Takes either a Clib JSON backup or a CSV.</p>
     </div>
 
     <div class="card">
       <h3>Storage</h3>
       <div class="meter" id="storageMeter"><i style="width:0%"></i></div>
       <p id="storageText">—</p>
+      <p class="hint" id="photoText">—</p>
     </div>
 
     <div class="card">
@@ -580,7 +591,9 @@ const KEY = {
   books:'clib.books', collections:'clib.collections',
   settings:'clib.settings', schema:'clib.schemaVersion', queue:'clib.queue'
 };
-const SCHEMA_VERSION = 1;
+/* v2 added coverPhotoId + spineColor. Nothing needs migrating — an older
+   record simply normalises to empty strings for both. */
+const SCHEMA_VERSION = 2;
 let storageBroken = false;
 
 function lsGet(key, fallback){
@@ -643,6 +656,9 @@ function normaliseBook(b){
     authors: Array.isArray(b.authors) ? b.authors.map(str).filter(Boolean)
            : (b.authors ? [str(b.authors)] : []),
     coverUrl: str(b.coverUrl),
+    // a photographed cover: the id of a Blob in IndexedDB, never the image
+    coverPhotoId: str(b.coverPhotoId),
+    spineColor: /^#[0-9a-f]{6}$/i.test(str(b.spineColor)) ? str(b.spineColor).toLowerCase() : '',
     publisher: str(b.publisher),
     publishedYear: num(b.publishedYear),
     pageCount: num(b.pageCount),
@@ -665,6 +681,170 @@ function uuid(){
     return v.toString(16);
   });
 }
+
+/* -------------------------------------------------- cover photo store -- */
+/* Photographed covers are the one thing that will not fit in localStorage, so
+   they live in IndexedDB as Blobs: stored by reference on disk, no base64
+   inflation, no 5 MB ceiling. The book record holds only the photo's id, which
+   keeps the library itself as small as it was. */
+const PHOTO_DB = 'clib-photos', PHOTO_STORE = 'covers';
+let photoDbPromise = null;
+
+function photoDb(){
+  if(photoDbPromise) return photoDbPromise;
+  photoDbPromise = new Promise((resolve, reject) => {
+    if(!window.indexedDB){ reject(new Error('This browser has no IndexedDB.')); return; }
+    let req;
+    try{ req = indexedDB.open(PHOTO_DB, 1); }
+    catch(err){ reject(err); return; }
+    req.onupgradeneeded = () => {
+      if(!req.result.objectStoreNames.contains(PHOTO_STORE))
+        req.result.createObjectStore(PHOTO_STORE, { keyPath:'id' });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error || new Error('Could not open the photo store.'));
+    req.onblocked = () => reject(new Error('The photo store is busy in another tab.'));
+  });
+  // A failed open must not be cached forever — Safari can refuse once in a
+  // private window and then work perfectly well on the next attempt.
+  photoDbPromise.catch(() => { photoDbPromise = null; });
+  return photoDbPromise;
+}
+/* Resolves on tx.oncomplete, not on req.onsuccess, so a write that resolves is
+   a write that actually committed. */
+function photoTx(mode, fn){
+  return photoDb().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(PHOTO_STORE, mode);
+    let out;
+    const req = fn(tx.objectStore(PHOTO_STORE));
+    if(req) req.onsuccess = () => { out = req.result; };
+    tx.oncomplete = () => resolve(out);
+    tx.onabort = tx.onerror = () => reject(tx.error || new Error('The photo store rejected that.'));
+  }));
+}
+const photoPut   = rec => photoTx('readwrite', s => s.put(rec));
+const photoGet   = id  => photoTx('readonly',  s => s.get(id));
+const photoDel   = id  => photoTx('readwrite', s => s.delete(id));
+const photoKeys  = ()  => photoTx('readonly',  s => s.getAllKeys());
+const photoAll   = ()  => photoTx('readonly',  s => s.getAll());
+const photoClear = ()  => photoTx('readwrite', s => s.clear());
+
+/* One object URL per photo for the life of the page. They are handles, not
+   copies, so holding a few hundred costs nothing; revoking on every re-render
+   would make the covers flicker. */
+const photoUrls = new Map();
+async function photoUrl(id){
+  if(!id) return '';
+  if(photoUrls.has(id)) return photoUrls.get(id);
+  let url = '';
+  try{
+    const rec = await photoGet(id);
+    if(rec && rec.blob) url = URL.createObjectURL(rec.blob);
+  }catch(err){ console.warn('photo load failed', id, err); }
+  photoUrls.set(id, url);   // a miss is cached too, or every render re-queries it
+  return url;
+}
+function forgetPhotoUrl(id){
+  const u = photoUrls.get(id);
+  if(u) URL.revokeObjectURL(u);
+  photoUrls.delete(id);
+}
+
+/* Anything the library no longer points at — a cancelled import, a book
+   deleted while the store was unreachable — is dead weight on the disk. */
+async function sweepPhotos(){
+  try{
+    const keys = await photoKeys();
+    if(!keys.length) return 0;
+    const live = new Set(books.map(b => b.coverPhotoId).filter(Boolean));
+    const dead = keys.filter(k => !live.has(k));
+    for(const k of dead){ forgetPhotoUrl(k); await photoDel(k); }
+    if(dead.length) console.info('[clib] swept', dead.length, 'orphan cover photo(s)');
+    return dead.length;
+  }catch(err){ return 0; }   // no photo store on this browser: nothing to sweep
+}
+
+/* ---- capture ------------------------------------------------------- */
+const PHOTO_MAX = 620;        // long edge in px — a 108px detail cover at 3x DPR
+const PHOTO_QUALITY = 0.82;
+
+function loadImageFile(file){
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload  = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('That file is not an image this browser can read.')); };
+    img.src = url;
+  });
+}
+/* A phone camera hands over a 12 MP, ~4 MB JPEG. At 620 px and quality 0.82
+   that lands around 40 KB, which is the whole reason a few hundred
+   photographed covers are practical. EXIF rotation is applied by the <img>
+   element itself, so naturalWidth/Height are already the upright dimensions. */
+async function makeCoverPhoto(file){
+  const img = await loadImageFile(file);
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  if(!iw || !ih) throw new Error('That image has no dimensions.');
+  const k = Math.min(1, PHOTO_MAX / Math.max(iw, ih));
+  const w = Math.max(1, Math.round(iw * k)), h = Math.max(1, Math.round(ih * k));
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const cx = cv.getContext('2d');
+  cx.drawImage(img, 0, 0, w, h);
+  const spine = dominantColour(cx, w, h);
+  const blob = await new Promise(res => cv.toBlob(res, 'image/jpeg', PHOTO_QUALITY));
+  if(!blob) throw new Error('This browser could not encode the photo.');
+  return { blob, w, h, spine };
+}
+
+/* The shelf-view spine colour, taken from the cover itself. A plain average
+   turns every cover to the same mud, so pixels go into a coarse 4x4x4 cube and
+   the fullest bucket wins — ignoring near-white (page edges, studio
+   backgrounds) and near-black (shadow, barcode blocks). */
+function dominantColour(cx, w, h){
+  let data;
+  try{ data = cx.getImageData(0, 0, w, h).data; }
+  catch(err){ return ''; }
+  const bins = new Map();
+  for(let i = 0; i < data.length; i += 16){          // every 4th pixel is plenty
+    const r = data[i], g = data[i+1], b = data[i+2];
+    if(data[i+3] < 128) continue;
+    const lum = 0.299*r + 0.587*g + 0.114*b;
+    if(lum > 232 || lum < 24) continue;
+    const key = (r >> 6) * 16 + (g >> 6) * 4 + (b >> 6);
+    let e = bins.get(key);
+    if(!e){ e = [0,0,0,0]; bins.set(key, e); }
+    e[0] += r; e[1] += g; e[2] += b; e[3]++;
+  }
+  let best = null;
+  bins.forEach(e => { if(!best || e[3] > best[3]) best = e; });
+  if(!best) return '';
+  const n = best[3];
+  return rgbHex(best[0]/n, best[1]/n, best[2]/n);
+}
+const hex2 = v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+const rgbHex = (r, g, b) => '#' + hex2(r) + hex2(g) + hex2(b);
+function hexRgb(h){
+  const m = /^#([0-9a-f]{6})$/i.exec(String(h || ''));
+  if(!m) return null;
+  const n = parseInt(m[1], 16);
+  return [n >> 16 & 255, n >> 8 & 255, n & 255];
+}
+/** Whichever of cream or near-black carries more contrast on that colour. */
+function inkOn(hex){
+  const c = hexRgb(hex);
+  if(!c) return '#f5f5f5';
+  const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const L = 0.2126*f(c[0]) + 0.7152*f(c[1]) + 0.0722*f(c[2]);
+  return (1.05 / (L + 0.05)) >= ((L + 0.05) / 0.0585) ? '#fbf7ec' : '#1c1408';
+}
+
+const blobToDataUrl = blob => new Promise((resolve, reject) => {
+  const fr = new FileReader();
+  fr.onload  = () => resolve(String(fr.result));
+  fr.onerror = () => reject(fr.error || new Error('Could not read a photo.'));
+  fr.readAsDataURL(blob);
+});
 
 /* ---------------------------------------------------------------- utils */
 const $  = (s, r) => (r||document).querySelector(s);
@@ -898,8 +1078,15 @@ function updateBook(id, patch){
 function deleteBook(id){
   const i = books.findIndex(b => b.id === id);
   if(i < 0) return;
+  const pid = books[i].coverPhotoId;
   books.splice(i,1);
   saveBooks();
+  // an "add all" import can leave two books sharing one photo, so only drop it
+  // once nothing is pointing at it any more
+  if(pid && !books.some(b => b.coverPhotoId === pid)){
+    forgetPhotoUrl(pid);
+    photoDel(pid).catch(err => console.warn('photo delete failed', pid, err));
+  }
 }
 function ensureCollection(name){
   const n = str(name);
@@ -911,11 +1098,29 @@ function ensureCollection(name){
    404s (Open Library has no image for plenty of ISBNs) simply paints nothing
    and the title shows through — no onerror handler, so a title containing a
    quote cannot break out into the attribute. */
+/* A photographed cover always beats the Open Library one: it was a deliberate
+   act, and it is a picture of the actual copy on the actual shelf. Its src
+   cannot be set inline because reading the Blob is async, so it is marked and
+   filled in by hydratePhotos once the sheet or list is in the document. */
 function coverHtml(b, cls){
+  const pid = str(b.coverPhotoId);
+  const img = pid ? '<img alt="" data-photo="' + esc(pid) + '">'
+            : b.coverUrl ? '<img loading="lazy" alt="" src="' + esc(b.coverUrl) + '">'
+            : '';
   return '<div class="cover' + (cls ? ' ' + cls : '') + '">' +
-         '<span class="ph">' + esc(b.title) + '</span>' +
-         (b.coverUrl ? '<img loading="lazy" alt="" src="' + esc(b.coverUrl) + '">' : '') +
+         '<span class="ph">' + esc(b.title) + '</span>' + img +
          '</div>';
+}
+/** Resolve every <img data-photo> in `root` against the photo store. */
+function hydratePhotos(root){
+  $$('img[data-photo]', root).forEach(img => {
+    const id = img.dataset.photo;
+    img.removeAttribute('data-photo');     // never hydrate the same node twice
+    photoUrl(id).then(url => {
+      if(url) img.src = url;
+      else img.remove();                   // photo gone: let the title show through
+    });
+  });
 }
 const byline = b => b.authors.length ? b.authors.join(', ') : 'Unknown author';
 
@@ -934,7 +1139,10 @@ function hashStr(s){
 }
 function spineHtml(b){
   const h = hashStr(b.title + '|' + (b.authors[0] || ''));
-  const [c, fg] = SPINE_COLOURS[h % SPINE_COLOURS.length];
+  // a photographed cover gives a real colour to stand the spine in; without
+  // one the hash picks a plausible book colour instead
+  const c  = b.spineColor || SPINE_COLOURS[h % SPINE_COLOURS.length][0];
+  const fg = b.spineColor ? inkOn(b.spineColor) : SPINE_COLOURS[h % SPINE_COLOURS.length][1];
   // thickness tracks the page count, the way a real spine does
   const pages = b.pageCount === null ? 220 : b.pageCount;
   const w = Math.round(Math.min(50, Math.max(23, 23 + pages / 26)));
@@ -1027,6 +1235,7 @@ function renderLibrary(){
   body.innerHTML = '<div class="' + mode + '">' + html + '</div>' +
                    '<p class="hint" style="text-align:center;margin-top:14px">' +
                    list.length + ' of ' + books.length + ' shown</p>';
+  hydratePhotos(body);
   $$('.book, .sp', body).forEach(el => el.onclick = () => openDetail(el.dataset.id));
 }
 
@@ -1068,6 +1277,7 @@ function openSheet(title, bodyHtml, opts){
     '<div class="sheet-body">' + bodyHtml + '</div>';
   $('#backdrop').classList.add('open');
   sheet.scrollTop = 0;
+  hydratePhotos(sheet);
   $('#sheetClose').onclick = () => closeSheet();
   sheetCloser = opts.onClose || null;
   return sheet;
@@ -1163,8 +1373,28 @@ function openEditor(book){
       ['want','reading','read'].map(v => '<option value="' + v + '"' + (b.readStatus === v ? ' selected' : '') + '>' +
         ({want:'Want to read',reading:'Reading',read:'Read'})[v] + '</option>').join('') +
     '</select></label>' +
+    '<div class="field"><span class="flabel">Cover</span>' +
+      '<div class="coveredit">' +
+        '<div class="cover" id="eCoverPrev">' +
+          '<span class="ph">' + esc(b.title === 'Untitled' && isNew ? 'No cover' : b.title) + '</span>' +
+          (b.coverPhotoId ? '<img alt="" data-photo="' + esc(b.coverPhotoId) + '">'
+           : b.coverUrl ? '<img alt="" src="' + esc(b.coverUrl) + '">' : '') +
+        '</div>' +
+        '<div class="coveredit-side">' +
+          '<button type="button" class="btn sm" id="ePhotoCam">Photograph it</button>' +
+          '<button type="button" class="btn sm" id="ePhotoPick">Choose a photo</button>' +
+          '<button type="button" class="btn sm danger' + (b.coverPhotoId ? '' : ' hide') + '" id="ePhotoDrop">Remove photo</button>' +
+          '<p class="hint" id="ePhotoNote">' +
+            (b.coverPhotoId ? 'Your own photo is in use.' : 'Stand the book up in decent light.') + '</p>' +
+        '</div>' +
+      '</div>' +
+      // two inputs, not one: `capture` opens the camera straight away, which is
+      // what you want at the shelf, but it also hides the photo library
+      '<input type="file" id="ePhotoCamF" accept="image/*" capture="environment" class="hide">' +
+      '<input type="file" id="ePhotoPickF" accept="image/*" class="hide">' +
+    '</div>' +
     '<label class="field"><span>Cover image URL</span><input type="url" id="eCover" value="' + esc(b.coverUrl) + '"></label>' +
-    '<div class="field"><span style="display:block;font-size:12.5px;font-weight:650;color:var(--muted);margin-bottom:5px">Collections</span>' +
+    '<div class="field"><span class="flabel">Collections</span>' +
       '<div class="chips" id="eColls">' + (collBoxes || '<span class="hint">None yet — add some in Settings.</span>') + '</div>' +
       '<div class="row" style="margin-top:9px"><input type="text" id="eNewColl" placeholder="New collection">' +
       '<button class="btn sm" id="eAddColl" style="flex:none">Add</button></div></div>' +
@@ -1187,7 +1417,63 @@ function openEditor(book){
     }
     $('#eNewColl').value = '';
   };
-  $('#eSave').onclick = () => {
+
+  /* Nothing touches the photo store until Save. A cancelled edit must not
+     leave an orphan blob behind, and a photo swapped twice must not leave the
+     first one. `pending` is the new blob; `dropped` means an existing photo
+     was removed. */
+  const pending = { blob:null, spine:'', dropped:false, previewUrl:'' };
+  const prev = $('#eCoverPrev'), note = $('#ePhotoNote'), dropBtn = $('#ePhotoDrop');
+  const setPreview = src => {
+    const old = $('img', prev);
+    if(old) old.remove();
+    if(!src) return;
+    const img = document.createElement('img');
+    img.alt = '';
+    img.src = src;                 // a property, never interpolated into markup
+    prev.appendChild(img);
+  };
+  const takePhoto = async file => {
+    if(!file) return;
+    if(!/^image\//.test(file.type || '')){ toast('That is not an image.', 'err'); return; }
+    prev.insertAdjacentHTML('beforeend', '<span class="coveredit-busy"><span class="spinner"></span></span>');
+    try{
+      const shot = await makeCoverPhoto(file);
+      if(pending.previewUrl) URL.revokeObjectURL(pending.previewUrl);
+      pending.blob = shot.blob;
+      pending.spine = shot.spine;
+      pending.dropped = false;
+      pending.previewUrl = URL.createObjectURL(shot.blob);
+      setPreview(pending.previewUrl);
+      dropBtn.classList.remove('hide');
+      note.textContent = Math.round(shot.blob.size / 1024) + ' KB · saved when you save the book.';
+    }catch(err){
+      toast(err.message || 'Could not use that photo.', 'err', 5000);
+    }finally{
+      const busy = $('.coveredit-busy', prev);
+      if(busy) busy.remove();
+    }
+  };
+  $('#ePhotoCam').onclick  = () => $('#ePhotoCamF').click();
+  $('#ePhotoPick').onclick = () => $('#ePhotoPickF').click();
+  ['#ePhotoCamF', '#ePhotoPickF'].forEach(sel => {
+    $(sel).onchange = e => {
+      const f = e.target.files && e.target.files[0];
+      e.target.value = '';    // so picking the same file twice still fires
+      takePhoto(f);
+    };
+  });
+  dropBtn.onclick = () => {
+    if(pending.previewUrl){ URL.revokeObjectURL(pending.previewUrl); pending.previewUrl = ''; }
+    pending.blob = null; pending.spine = '';
+    pending.dropped = true;
+    dropBtn.classList.add('hide');
+    const url = $('#eCover').value.trim();
+    setPreview(url);
+    note.textContent = url ? 'Back to the cover URL below.' : 'Stand the book up in decent light.';
+  };
+
+  $('#eSave').onclick = async () => {
     const title = $('#eTitle').value.trim();
     if(!title){ toast('A title is required.', 'err'); $('#eTitle').focus(); return; }
     const isbnRaw = $('#eIsbn').value.trim();
@@ -1213,12 +1499,44 @@ function openEditor(book){
     if(isNew){
       const dupe = findByIsbn(isbn13);
       if(dupe){ toast('You already have “' + dupe.title + '”.', 'err', 5000); return; }
+    }
+
+    /* The photo is committed before the book record, so a record can never end
+       up pointing at a blob that is not there. If the store refuses the write
+       the save is abandoned with the sheet still open and everything typed
+       still in it, rather than quietly saving a book without its cover. */
+    const oldPhoto = str(b.coverPhotoId);
+    patch.coverPhotoId = oldPhoto;
+    patch.spineColor   = b.spineColor;
+    if(pending.dropped){ patch.coverPhotoId = ''; patch.spineColor = ''; }
+    if(pending.blob){
+      const pid = uuid();
+      try{
+        await photoPut({ id:pid, blob:pending.blob, bytes:pending.blob.size,
+                         addedAt:new Date().toISOString() });
+      }catch(err){
+        console.error('photo write failed', err);
+        toast('The photo could not be saved on this device — remove it, or try again.', 'err', 7000);
+        return;
+      }
+      patch.coverPhotoId = pid;
+      patch.spineColor   = pending.spine;
+    }
+    const stale = (patch.coverPhotoId !== oldPhoto) ? oldPhoto : '';
+
+    if(isNew){
       addBook(Object.assign({ source: b.source || 'manual' }, patch));
       toast('Added.', 'ok');
     }else{
       updateBook(b.id, patch);
       toast('Saved.', 'ok');
     }
+    // only now that the record is written is the replaced photo safe to drop
+    if(stale && !books.some(x => x.coverPhotoId === stale)){
+      forgetPhotoUrl(stale);
+      photoDel(stale).catch(err => console.warn('stale photo delete failed', err));
+    }
+    if(pending.previewUrl) URL.revokeObjectURL(pending.previewUrl);
     closeSheet();
     renderCollectionFilter(); renderLibrary(); renderSettings();
   };
@@ -1290,6 +1608,20 @@ function prefillEditor(d){
   $('#eIsbn').value    = d.isbn13 || '';
   $('#ePages').value   = d.pageCount === null ? '' : d.pageCount;
   $('#eCover').value   = d.coverUrl || '';
+  // keep the cover preview in step with what was just looked up. Only ever
+  // called on a freshly opened editor, so there is no photo to displace.
+  const prev = $('#eCoverPrev');
+  if(prev){
+    const ph = $('.ph', prev);
+    if(ph) ph.textContent = (d.title && d.title !== 'Untitled') ? d.title : 'No cover';
+    const old = $('img', prev);
+    if(old) old.remove();
+    if(d.coverUrl){
+      const img = document.createElement('img');
+      img.alt = ''; img.src = d.coverUrl;
+      prev.appendChild(img);
+    }
+  }
 }
 
 /* ============================================================== scanner */
@@ -1901,8 +2233,12 @@ function renderReview(){
 }
 
 /* ================================================================== CSV */
+/* `coverPhoto` is a yes/blank marker, not the image — a CSV cannot carry one.
+   It is there so a restored-from-CSV library tells you which books need
+   re-photographing. The JSON backup is the one that keeps the pictures. */
 const CSV_HEADER = ['id','isbn13','isbn10','title','authors','series','seriesVolume','publisher',
-                    'publishedYear','pageCount','shelf','collections','readStatus','coverUrl','dateAdded'];
+                    'publishedYear','pageCount','shelf','collections','readStatus','coverUrl',
+                    'coverPhoto','dateAdded'];
 
 function csvCell(v){
   const s = (v === null || v === undefined) ? '' : String(v);
@@ -1916,7 +2252,8 @@ function booksToCsv(list){
       b.seriesVolume === null ? '' : b.seriesVolume, b.publisher,
       b.publishedYear === null ? '' : b.publishedYear,
       b.pageCount === null ? '' : b.pageCount,
-      b.shelf, b.collections.join('|'), b.readStatus, b.coverUrl, b.dateAdded
+      b.shelf, b.collections.join('|'), b.readStatus, b.coverUrl,
+      b.coverPhotoId ? 'yes' : '', b.dateAdded
     ].map(csvCell).join(','));
   });
   return '﻿' + rows.join('\r\n') + '\r\n';
@@ -1947,11 +2284,52 @@ function exportCsv(list, name){
   const data = list || books;
   download(name || ('bookshelf-backup-' + today() + '.csv'), booksToCsv(data), 'text/csv');
 }
-function exportJson(){
-  download('bookshelf-backup-' + today() + '.json', JSON.stringify({
+/* The full backup. Photographed covers go in as data URLs under their own ids,
+   because they exist nowhere else — lose them and there is no Open Library to
+   fetch them back from. That makes the file big (roughly 55 KB per photo once
+   base64 has had its 33%), which is the price of it being a real restore. */
+async function exportJson(name){
+  let photos = [];
+  let busy = null;
+  try{
+    const live = new Set(books.map(b => b.coverPhotoId).filter(Boolean));
+    if(live.size){
+      busy = busyToast('Packing ' + live.size + ' cover photo' + (live.size === 1 ? '' : 's') + '…');
+      const all = await photoAll();
+      for(const rec of all){
+        if(!live.has(rec.id) || !rec.blob) continue;
+        photos.push({ id:rec.id, dataUrl: await blobToDataUrl(rec.blob) });
+      }
+    }
+  }catch(err){
+    console.warn('photo export failed', err);
+    toast('The cover photos could not be read — the books were exported without them.', 'err', 7000);
+  }
+  if(busy) busy.done();
+  const text = JSON.stringify({
     app:'clib', schemaVersion:SCHEMA_VERSION, exportedAt:new Date().toISOString(),
-    books, collections, settings
-  }, null, 2), 'application/json');
+    books, collections, settings, photos
+  });
+  download(name || ('bookshelf-backup-' + today() + '.json'), text, 'application/json');
+  return { photos: photos.length, bytes: text.length };
+}
+
+/** Put a backup's photos back under their original ids, so the book records
+ *  that reference them resolve without any remapping. */
+async function restorePhotos(list){
+  let ok = 0;
+  for(const p of arr(list)){
+    if(!p || !p.id || typeof p.dataUrl !== 'string') continue;
+    if(!/^data:image\//.test(p.dataUrl)) continue;
+    try{
+      const blob = await (await fetch(p.dataUrl)).blob();
+      await photoPut({ id:String(p.id), blob, bytes:blob.size,
+                       addedAt: str(p.addedAt) || new Date().toISOString() });
+      forgetPhotoUrl(String(p.id));   // drop any cached URL for a stale version
+      ok++;
+    }catch(err){ console.warn('photo restore failed', p.id, err); }
+  }
+  return ok;
 }
 
 function rowsToBooks(rows){
@@ -1984,24 +2362,51 @@ function rowsToBooks(rows){
 }
 
 function startImport(file){
+  const isJson = /\.json$/i.test(file.name) || file.type === 'application/json';
   const reader = new FileReader();
   reader.onerror = () => toast('Could not read that file.', 'err');
   reader.onload = () => {
-    let incoming;
-    try{ incoming = rowsToBooks(parseCsv(String(reader.result))); }
+    const text = String(reader.result);
+    if(isJson){
+      let doc;
+      try{ doc = JSON.parse(text); }
+      catch(err){ toast('That JSON could not be parsed.', 'err', 6000); return; }
+      if(!doc || !Array.isArray(doc.books)){
+        toast('That file has no “books” list — it is not a Clib backup.', 'err', 6000); return;
+      }
+      const incoming = doc.books.filter(b => b && typeof b === 'object').map(normaliseBook);
+      if(!incoming.length){ toast('No books in that backup.', 'err'); return; }
+      arr(doc.collections).filter(c => typeof c === 'string').forEach(ensureCollection);
+      chooseImportMode(incoming, file.name, arr(doc.photos));
+      return;
+    }
+    let incoming, marked = 0;
+    try{
+      const rows = parseCsv(text);
+      incoming = rowsToBooks(rows);
+      // the CSV cannot bring the pictures, but it does say which books had one
+      const hi = rows[0].map(h => h.trim().replace(/^﻿/, '')).indexOf('coverPhoto');
+      if(hi >= 0) marked = rows.slice(1).filter(r => /^\s*yes\s*$/i.test(r[hi] || '')).length;
+    }
     catch(err){ toast(err.message || 'That CSV could not be parsed.', 'err', 6000); return; }
-    chooseImportMode(incoming, file.name);
+    chooseImportMode(incoming, file.name, [], marked);
   };
   reader.readAsText(file, 'utf-8');
 }
-function chooseImportMode(incoming, filename){
+function chooseImportMode(incoming, filename, photos, markedNoPhoto){
+  photos = arr(photos);
+  const withPhoto = markedNoPhoto || 0;
   const known = new Set();
   books.forEach(b => { if(b.isbn13) known.add('i:' + b.isbn13); known.add('u:' + b.id); });
   const fresh = incoming.filter(b => !(b.isbn13 && known.has('i:' + b.isbn13)) && !known.has('u:' + b.id));
 
   openSheet('Import ' + filename,
     '<p style="margin:0 0 14px">Found <b>' + incoming.length + '</b> book' + (incoming.length === 1 ? '' : 's') +
-    ' in that file. <b>' + fresh.length + '</b> ' + (fresh.length === 1 ? 'is' : 'are') + ' new to this library.</p>' +
+    ' in that file. <b>' + fresh.length + '</b> ' + (fresh.length === 1 ? 'is' : 'are') + ' new to this library.' +
+    (photos.length ? ' Carrying <b>' + photos.length + '</b> cover photo' + (photos.length === 1 ? '' : 's') + '.'
+     : withPhoto ? ' <b>' + withPhoto + '</b> had photographed covers, but a CSV does not carry the pictures — ' +
+                   'those books will come back without them.'
+     : '') + '</p>' +
     '<div class="card"><h3>Merge</h3><p>Add the ' + fresh.length + ' new one' + (fresh.length === 1 ? '' : 's') +
       ' and leave everything you already have untouched.</p>' +
       '<button class="btn primary wide" id="imMerge"' + (fresh.length ? '' : ' disabled') + '>Merge</button></div>' +
@@ -2012,10 +2417,24 @@ function chooseImportMode(incoming, filename){
       ' on this device and load the file instead. Your current library is exported to CSV first.</p>' +
       '<button class="btn danger wide" id="imReplace">Replace…</button></div>');
 
-  const finish = (list, verb) => {
+  const finish = async (list, verb) => {
     list.forEach(b => { books.push(b); b.collections.forEach(ensureCollection); });
     saveBooks(); saveCollections();
-    closeSheet(); renderCollectionFilter(); renderLibrary(); renderSettings();
+    closeSheet();
+    if(photos.length){
+      // only the photos the kept books actually point at, and only after the
+      // records are saved — then sweep, which clears out everything a Replace
+      // or a partial merge has just orphaned
+      const need = new Set(list.map(b => b.coverPhotoId).filter(Boolean));
+      const want = photos.filter(p => p && need.has(String(p.id)));
+      const busy = want.length ? busyToast('Restoring ' + want.length + ' cover photo' +
+                                           (want.length === 1 ? '' : 's') + '…') : null;
+      const n = await restorePhotos(want);
+      if(busy) busy.done();
+      if(n) verb += ' ' + n + ' cover photo' + (n === 1 ? '' : 's') + ' restored.';
+    }
+    await sweepPhotos();
+    renderCollectionFilter(); renderLibrary(); renderSettings(); refreshPhotoStats();
     toast(verb, 'ok', 4000);
   };
   $('#imMerge').onclick = () => finish(fresh, fresh.length + ' book' + (fresh.length === 1 ? '' : 's') + ' merged in.');
@@ -2023,11 +2442,14 @@ function chooseImportMode(incoming, filename){
                                      incoming.length + ' book' + (incoming.length === 1 ? '' : 's') + ' added.');
   $('#imReplace').onclick = async () => {
     sheetCloser = null;
-    if(books.length) exportCsv(books, 'bookshelf-before-replace-' + today() + '.csv');
+    // JSON, not CSV: the safety net has to include the photographed covers,
+    // which exist nowhere else and cannot be looked up again
+    if(books.length) await exportJson('bookshelf-before-replace-' + today() + '.json');
     const ok = await confirmDialog({
       title:'Replace the whole library?',
       bodyHtml:'This deletes all <b>' + books.length + '</b> books on this device and loads the ' +
-               incoming.length + ' from the file. A backup CSV of the current library has just been downloaded.',
+               incoming.length + ' from the file. A full JSON backup of the current library, cover ' +
+               'photos included, has just been downloaded.',
       requireText:'REPLACE', confirmLabel:'Replace everything', danger:true });
     if(!ok) return;
     books = [];
@@ -2064,9 +2486,34 @@ function renderSettings(){
     (used / 1024).toFixed(0) + ' KB of roughly 5 MB used (' + pct + '%) · ' +
     books.length + ' book' + (books.length === 1 ? '' : 's') +
     (storageBroken ? ' · WRITES ARE FAILING' : '');
+  refreshPhotoStats();
 
   $('#fTheme').value = settings.theme;
 }
+/* Photos are not in the 5 MB meter above and must not be added to it — they
+   are in IndexedDB, which has its own, far larger allowance. Reading the
+   records does not pull the image bytes into memory; a Blob in IndexedDB is a
+   handle to a file on disk. */
+async function refreshPhotoStats(){
+  const el = $('#photoText');
+  if(!el) return;
+  let count = 0, bytes = 0;
+  try{
+    const all = await photoAll();
+    count = all.length;
+    all.forEach(r => { bytes += r.bytes || (r.blob && r.blob.size) || 0; });
+  }catch(err){
+    el.textContent = 'Cover photos are not available on this browser.';
+    return;
+  }
+  el.textContent = count
+    ? count + ' photographed cover' + (count === 1 ? '' : 's') + ' · ' + fmtBytes(bytes) +
+      ', stored separately from the 5 MB above'
+    : 'No photographed covers yet — take one from a book’s Edit screen.';
+}
+const fmtBytes = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB'
+                    : n >= 1024    ? Math.round(n / 1024) + ' KB'
+                    : n + ' bytes';
 function manageCollection(name){
   openSheet('Collection',
     '<label class="field"><span>Name</span><input type="text" id="cName" value="' + esc(name) + '"></label>' +
@@ -2180,9 +2627,12 @@ function wireUp(){
     if(!books.length){ toast('Nothing to export yet.', 'err'); return; }
     exportCsv(); toast('CSV downloaded.', 'ok');
   };
-  $('#btnExportJson').onclick = () => {
+  $('#btnExportJson').onclick = async () => {
     if(!books.length){ toast('Nothing to export yet.', 'err'); return; }
-    exportJson(); toast('JSON downloaded.', 'ok');
+    const r = await exportJson();
+    toast('JSON downloaded — ' + books.length + ' books' +
+          (r.photos ? ', ' + r.photos + ' cover photo' + (r.photos === 1 ? '' : 's') : '') +
+          ' · ' + fmtBytes(r.bytes) + '.', 'ok', 5000);
   };
   $('#btnImportCsv').onclick = () => $('#fileCsv').click();
   $('#fileCsv').onchange = e => {
@@ -2197,14 +2647,17 @@ function wireUp(){
     const ok = await confirmDialog({
       title:'Delete everything?',
       bodyHtml:'All <b>' + books.length + '</b> books, ' + collections.length +
-               ' collections and your settings will be erased from this device. There is no undo — ' +
-               'export a CSV first if you have not already.',
+               ' collections, every photographed cover and your settings will be erased from this ' +
+               'device. There is no undo — export a JSON backup first if you have not already.',
       requireText:'DELETE', confirmLabel:'Erase this library', danger:true });
     if(!ok) return;
     books = []; collections = []; queue = [];
     settings = Object.assign({}, DEFAULT_SETTINGS);
     Object.keys(KEY).forEach(k => { try{ localStorage.removeItem(KEY[k]); }catch(err){} });
     lsSet(KEY.schema, SCHEMA_VERSION);
+    photoUrls.forEach(u => { if(u) URL.revokeObjectURL(u); });
+    photoUrls.clear();
+    photoClear().catch(err => console.warn('photo store clear failed', err));
     applyTheme(); renderCollectionFilter(); syncFilterStyles();
     refreshQueueBadge(); renderLibrary(); renderSettings();
     toast('Everything deleted.');
@@ -2234,6 +2687,20 @@ function boot(){
   let stale = false;
   queue.forEach(q => { if(q.state === 'loading'){ q.state = 'error'; q.note = 'Lookup interrupted'; q.selected = false; stale = true; } });
   if(stale) saveQueue();
+
+  // Off the critical path: clear out any cover photo nothing points at.
+  setTimeout(() => { sweepPhotos(); }, 2500);
+
+  /* A photographed cover exists nowhere else — there is no Open Library to
+     fetch it back from — and Safari throws away a site's storage after seven
+     idle days unless it is persistent or installed to the home screen. Ask.
+     A plain tab may well be refused, which is what the JSON backup is for. */
+  if(navigator.storage && navigator.storage.persist){
+    navigator.storage.persisted()
+      .then(yes => yes ? true : navigator.storage.persist())
+      .then(ok => { if(!ok) console.info('[clib] storage is not persistent — keep exporting backups'); })
+      .catch(() => {});
+  }
 }
 boot();
 

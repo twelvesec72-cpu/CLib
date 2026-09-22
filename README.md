@@ -38,13 +38,53 @@ in the top bar.
 
 The spines are **drawn, not photographed**. No spine-image source exists (Open
 Library holds front covers only), and `covers.openlibrary.org` sends no CORS
-headers, so a cover cannot even be sampled onto a canvas to borrow its colour.
-Storing photographed spines would mean base64 in `localStorage`, which the
-whole storage design rules out. So each spine is derived from the record:
-thickness from `pageCount` (23–50 px, the way a thick book really is thicker),
-colour from an FNV-1a hash of title + first author against a fixed palette, and
-height jittered from the same hash. A given book therefore always looks
-identical, and a shelf of them looks varied.
+headers, so a fetched cover cannot even be sampled onto a canvas to borrow its
+colour. So each spine is derived from the record: thickness from `pageCount`
+(23–50 px, the way a thick book really is thicker), colour from an FNV-1a hash
+of title + first author against a fixed palette, and height jittered from the
+same hash. A given book therefore always looks identical, and a shelf of them
+looks varied.
+
+A book with a **photographed** cover is the exception: that photo is a local
+canvas, so it can be sampled, and the spine takes the cover's own dominant
+colour instead of a hashed one. Its ink flips between cream and near-black on
+whichever gives more contrast.
+
+## Photographed covers
+
+Any book's **Edit** screen has *Photograph it* (straight to the camera, via
+`capture="environment"`) and *Choose a photo* (camera roll or files). A photo
+always beats the Open Library cover, which is what you want for a battered
+paperback or a book Open Library has never heard of.
+
+Two inputs rather than one because `capture` is what makes iOS and Android open
+the camera immediately, and it also suppresses the photo library — you cannot
+have both behaviours from one element.
+
+- **Where they live: IndexedDB, not `localStorage`.** A Blob in IndexedDB is a
+  handle to a file on disk; it is not base64 and it does not touch the 5 MB
+  book budget. The book record holds only the photo's id.
+- **What gets stored.** The source is downscaled to 620 px on the long edge and
+  re-encoded as JPEG at 0.82. A 4032x3024 camera frame becomes 620x465 in about
+  50 ms, and a 1.4 MB source lands at 40–90 KB. EXIF rotation is applied by the
+  `<img>` element, so no orientation handling is needed.
+- **Dominant colour.** Pixels go into a coarse 4x4x4 cube and the fullest
+  bucket wins, skipping anything above 232 or below 24 luminance — otherwise
+  page edges, studio backgrounds and barcode blocks dominate and every spine
+  comes out grey.
+- **Nothing is written until Save.** A cancelled edit leaves no orphan blob, a
+  photo swapped twice leaves only the last one, and the blob is committed
+  *before* the book record so a record can never point at a photo that is not
+  there. If the store refuses the write the save is abandoned with the sheet
+  still open.
+- **Deleting a book deletes its photo**, unless another book still points at it
+  (an "add all" import can share one). Anything orphaned anyway is swept 2.5 s
+  after boot.
+- **`navigator.storage.persist()` is requested at boot.** Safari discards a
+  site's storage after seven idle days unless it is persistent or installed to
+  the home screen, and a photographed cover cannot be fetched back from
+  anywhere. A plain browser tab may be refused, which is what the JSON backup
+  is for.
 
 ## Theme
 
@@ -92,9 +132,10 @@ measured; the worst is 4.68:1 (ink on accent-soft, light).
   optional — an HTTP error from one is treated as a miss and the chain
   continues; only a total loss of contact raises an error. (`/api/books` has
   been answering 404 for valid ISBNs, which is why the chain does not trust it.)
-- **Covers.** Only the URL is stored, never the image, which keeps a few
-  thousand books inside the ~5 MB `localStorage` quota. Covers are cached by
-  the service worker so the library still looks right offline.
+- **Covers.** For a looked-up cover only the URL is stored, never the image,
+  which keeps a few thousand books inside the ~5 MB `localStorage` quota. They
+  are cached by the service worker so the library still looks right offline. A
+  cover you photograph yourself is a Blob in IndexedDB instead — see below.
 - **Offline.** The app shell is precached, so it opens and renders with no
   connection. Lookups fail with a message rather than a dead spinner.
 
@@ -107,19 +148,42 @@ authors, publisher, year, pages, series, shelf, collections, cover URL, dates):
 **~1.06 KB per book**, so roughly **4,900 books**, or about 6,200 for sparse
 records. Settings shows live usage.
 
-Past that, the next step is IndexedDB, which has no practical cap — a change
-worth making only if the shelf ever approaches a few thousand books.
+Past that, the next step is moving the books to IndexedDB too, which has no
+practical cap — worth doing only if the shelf ever approaches a few thousand.
+
+Photographed covers are **not** in that 5 MB and are not the constraint. They
+are in IndexedDB, whose quota is a share of free disk: 6.2 GB on the machine
+this was measured on, around 1 GB on iOS. At 60 KB a photo that is tens of
+thousands of covers, far past the ~4,900 books the records themselves allow.
+Settings reports the two separately.
 
 ## Backups
 
-CSV export is the only recovery path in this version — clearing browser data
+Export is the only recovery path in this version — clearing browser data
 destroys the library. Export from Settings regularly; the filename is dated.
 
-Import offers merge (skip what you already have), add-all (duplicates included)
-and replace. Replace requires typing `REPLACE` and auto-exports the current
-library first.
+**JSON is now the real backup and CSV is not.** The JSON file carries the
+books, the collections, the settings *and* every photographed cover as a data
+URL, because those photos exist nowhere else. It costs roughly 55–125 KB per
+photo once base64 has taken its 33%. CSV stays for spreadsheets: it has a
+`coverPhoto` column that says `yes` or nothing, so a CSV-restored library at
+least tells you which books need re-photographing.
+
+Import takes either file. It offers merge (skip what you already have),
+add-all (duplicates included) and replace. Replace requires typing `REPLACE`
+and auto-exports the current library **as JSON** first — a CSV safety net would
+silently drop the photos it is meant to be protecting. Photos are written back
+under their original ids, after the chosen books are saved and only for the
+books actually kept, then anything orphaned is swept.
 
 ## Storage keys
 
-`clib.books`, `clib.collections`, `clib.settings`, `clib.schemaVersion`,
-`clib.queue` (the un-reviewed rapid-mode scans, so ten scans survive a reload).
+`localStorage`: `clib.books`, `clib.collections`, `clib.settings`,
+`clib.schemaVersion`, `clib.queue` (the un-reviewed rapid-mode scans, so ten
+scans survive a reload).
+
+IndexedDB: database `clib-photos`, store `covers`, keyed by `id`, one record
+per photographed cover — `{ id, blob, bytes, addedAt }`.
+
+Schema v2 added `coverPhotoId` and `spineColor` to the book record. Nothing
+needs migrating: a v1 record normalises to empty strings for both.
