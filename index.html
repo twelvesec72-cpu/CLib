@@ -250,6 +250,51 @@ label.field > span{display:block; font-size:12.5px; font-weight:650; color:var(-
 .dot{display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:5px; vertical-align:1px}
 .dot.read{background:var(--ok)} .dot.reading{background:var(--warn)} .dot.want{background:var(--muted)}
 
+/* ------------------------------------------------------------ shelf view */
+/* Spines are drawn, not photographed — there is no spine-image source, and
+   storing photos would mean base64 in localStorage. Thickness comes from the
+   page count and colour from a hash of title+author, so a given book always
+   looks the same and a shelf of them looks varied. Each flex row is a fixed
+   172px tall, which lets one repeating gradient draw the board under every
+   row however the spines wrap. */
+.shelf{
+  display:flex; flex-wrap:wrap; align-items:flex-end; align-content:flex-start;
+  gap:10px 3px;
+  /* the final row's board sits just past the content box, so make room for it */
+  padding-bottom:10px;
+  background-image:repeating-linear-gradient(to bottom,
+    transparent 0 172px, var(--surface-3) 172px 178px, transparent 178px 182px);
+}
+.shelf .sp{
+  height:172px; width:var(--w); flex:none; padding:0; border:0; background:none;
+  display:flex; align-items:flex-end;
+}
+.shelf .sp .body{
+  width:100%; height:var(--h);
+  background:linear-gradient(to right,
+    rgba(0,0,0,.28) 0 2px, transparent 2px 5px,
+    transparent calc(100% - 4px), rgba(0,0,0,.22) calc(100% - 4px) 100%),
+    var(--c);
+  color:var(--fg);
+  border-radius:2px 2px 1px 1px;
+  box-shadow:0 2px 5px rgba(0,0,0,.35);
+  display:flex; flex-direction:column; align-items:center;
+  padding:7px 0 6px; overflow:hidden; position:relative;
+}
+.shelf .sp .band{width:74%; height:1.5px; background:currentColor; opacity:.5; flex:none}
+.shelf .sp .ttl{
+  writing-mode:vertical-rl; text-orientation:mixed;
+  font-size:10.5px; font-weight:700; letter-spacing:.01em;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  flex:1; min-height:0; margin:5px 0; text-align:left;
+}
+.shelf .sp .au{
+  writing-mode:vertical-rl; font-size:8.5px; font-weight:600; opacity:.8;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  max-height:48px; margin-bottom:3px;
+}
+.shelf .sp .pip{width:5px;height:5px;border-radius:50%;flex:none;margin-bottom:5px}
+
 .empty{text-align:center; padding:48px 20px; color:var(--muted)}
 .empty svg{width:52px;height:52px;opacity:.35;margin-bottom:12px}
 .empty h2{font-size:17px; color:var(--text); margin-bottom:6px}
@@ -874,6 +919,39 @@ function coverHtml(b, cls){
 }
 const byline = b => b.authors.length ? b.authors.join(', ') : 'Unknown author';
 
+/* ---- drawn spines -------------------------------------------------- */
+/* Colours a real shelf might hold, each paired with readable ink. */
+const SPINE_COLOURS = [
+  ['#2f4b8f','#f2f5ff'], ['#d8a022','#2a1f04'], ['#7a8b3a','#f8faec'],
+  ['#b5502c','#fff2ec'], ['#1f6b63','#eefaf7'], ['#e3d5ac','#3a2f16'],
+  ['#6b3f6e','#f9effa'], ['#8c2f2a','#ffeeec'], ['#345e3a','#eef9ef'],
+  ['#c2762a','#2a1a06'], ['#405a75','#eef4fa'], ['#9c8b3f','#2a2408']
+];
+function hashStr(s){
+  let h = 2166136261;
+  for(let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function spineHtml(b){
+  const h = hashStr(b.title + '|' + (b.authors[0] || ''));
+  const [c, fg] = SPINE_COLOURS[h % SPINE_COLOURS.length];
+  // thickness tracks the page count, the way a real spine does
+  const pages = b.pageCount === null ? 220 : b.pageCount;
+  const w = Math.round(Math.min(50, Math.max(23, 23 + pages / 26)));
+  const ht = 132 + ((h >>> 8) % 5) * 9;
+  const surname = (b.authors[0] || '').trim().split(/\s+/).pop() || '';
+  return '<button class="sp" data-id="' + esc(b.id) + '" title="' + esc(b.title + ' — ' + byline(b)) + '"' +
+    ' style="--w:' + w + 'px;--h:' + ht + 'px;--c:' + c + ';--fg:' + fg + '">' +
+    '<span class="body">' +
+      '<span class="pip" style="background:var(--' +
+        (b.readStatus === 'read' ? 'ok' : b.readStatus === 'reading' ? 'warn' : 'muted') + ')"></span>' +
+      '<span class="band"></span>' +
+      '<span class="ttl">' + esc(b.title) + '</span>' +
+      (surname ? '<span class="au">' + esc(surname) + '</span>' : '') +
+      '<span class="band"></span>' +
+    '</span></button>';
+}
+
 function sortKeyTitle(b){ return b.title.replace(/^(the|a|an)\s+/i,'').toLowerCase(); }
 function sortKeyAuthor(b){
   const a = b.authors[0] || '￿';
@@ -935,19 +1013,34 @@ function renderLibrary(){
     };
     return;
   }
-  const grid = settings.view !== 'list';
-  const html = list.map(b =>
-    '<button class="book" data-id="' + esc(b.id) + '">' +
-      coverHtml(b) +
-      '<div class="meta">' +
-        '<div class="t"><span class="dot ' + b.readStatus + '"></span>' + esc(b.title) + '</div>' +
-        '<div class="a">' + esc(byline(b)) + '</div>' +
-      '</div>' +
-    '</button>').join('');
-  body.innerHTML = '<div class="' + (grid ? 'grid' : 'list') + '">' + html + '</div>' +
+  const mode = settings.view === 'list' || settings.view === 'shelf' ? settings.view : 'grid';
+  const html = mode === 'shelf'
+    ? list.map(spineHtml).join('')
+    : list.map(b =>
+        '<button class="book" data-id="' + esc(b.id) + '">' +
+          coverHtml(b) +
+          '<div class="meta">' +
+            '<div class="t"><span class="dot ' + b.readStatus + '"></span>' + esc(b.title) + '</div>' +
+            '<div class="a">' + esc(byline(b)) + '</div>' +
+          '</div>' +
+        '</button>').join('');
+  body.innerHTML = '<div class="' + mode + '">' + html + '</div>' +
                    '<p class="hint" style="text-align:center;margin-top:14px">' +
                    list.length + ' of ' + books.length + ' shown</p>';
-  $$('.book', body).forEach(el => el.onclick = () => openDetail(el.dataset.id));
+  $$('.book, .sp', body).forEach(el => el.onclick = () => openDetail(el.dataset.id));
+}
+
+/** The toggle shows the view you will get next, not the one you are in. */
+function applyViewIcon(){
+  const next = { grid:'list', list:'shelf', shelf:'grid' }[settings.view] || 'list';
+  const art = {
+    grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    list:'<path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round"/>',
+    shelf:'<path d="M4 20h16" stroke-linecap="round"/><rect x="5" y="7" width="3.4" height="10"/><rect x="10" y="5" width="3.4" height="12"/><rect x="15.4" y="8" width="3.4" height="9"/>'
+  }[next];
+  const btn = $('#btnViewMode');
+  btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">' + art + '</svg>';
+  btn.setAttribute('aria-label', 'Switch to ' + next + ' view');
 }
 
 function renderCollectionFilter(){
@@ -2035,8 +2128,10 @@ function wireUp(){
 
   $('#btnAdd').onclick = () => openManualAdd();
   $('#btnViewMode').onclick = () => {
-    settings.view = settings.view === 'list' ? 'grid' : 'list';
-    saveSettings(); renderLibrary();
+    const order = ['grid', 'list', 'shelf'];
+    const i = order.indexOf(settings.view);
+    settings.view = order[(i < 0 ? 0 : i + 1) % order.length];
+    saveSettings(); applyViewIcon(); renderLibrary();
   };
 
   let qTimer = null;
@@ -2127,6 +2222,7 @@ function boot(){
   $('#modeConfirm').setAttribute('aria-pressed', settings.scanMode === 'confirm' ? 'true' : 'false');
   $('#modeRapid').setAttribute('aria-pressed', settings.scanMode === 'rapid' ? 'true' : 'false');
   applyModeHint();
+  applyViewIcon();
   renderCollectionFilter();
   syncFilterStyles();
   wireUp();

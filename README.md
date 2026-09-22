@@ -31,6 +31,21 @@ touching the code.
 **On every redeploy, edit the first line of `sw.js`** — `clib-v1` → `clib-v2` and
 so on. Without it the installed phones keep serving the old app.
 
+## Views
+
+Grid, list, and **shelf** — spines standing side by side, cycled with the icon
+in the top bar.
+
+The spines are **drawn, not photographed**. No spine-image source exists (Open
+Library holds front covers only), and `covers.openlibrary.org` sends no CORS
+headers, so a cover cannot even be sampled onto a canvas to borrow its colour.
+Storing photographed spines would mean base64 in `localStorage`, which the
+whole storage design rules out. So each spine is derived from the record:
+thickness from `pageCount` (23–50 px, the way a thick book really is thicker),
+colour from an FNV-1a hash of title + first author against a fixed palette, and
+height jittered from the same hash. A given book therefore always looks
+identical, and a shelf of them looks varied.
+
 ## Theme
 
 Van Gogh palettes: **Starry Night** (deep indigo, chrome yellow) for dark,
@@ -82,6 +97,18 @@ measured; the worst is 4.68:1 (ink on accent-soft, light).
   the service worker so the library still looks right offline.
 - **Offline.** The app shell is precached, so it opens and renders with no
   connection. Lookups fail with a message rather than a dead spinner.
+
+## How much fits
+
+`localStorage` is capped at about **5 MB per origin** — a browser limit, not a
+choice in this code, and the reason covers are stored as URLs rather than
+images. Measured against 2,000 fully-populated records (ISBN-13 and -10, title,
+authors, publisher, year, pages, series, shelf, collections, cover URL, dates):
+**~1.06 KB per book**, so roughly **4,900 books**, or about 6,200 for sparse
+records. Settings shows live usage.
+
+Past that, the next step is IndexedDB, which has no practical cap — a change
+worth making only if the shelf ever approaches a few thousand books.
 
 ## Backups
 
