@@ -3,7 +3,10 @@
 A private catalogue for a physical book collection. One HTML file, no build step,
 no account, no server. Data lives in `localStorage` on the device that scanned it.
 
-**Live:** https://twelvesec72-cpu.github.io/Clib/
+**Live:** https://twelvesec72-cpu.github.io/CLib/
+
+The repo is `CLib` with a capital L and the Pages path is case-sensitive.
+Renaming the repo changes the URL and breaks every installed copy.
 
 ## Files
 
@@ -20,7 +23,7 @@ touching the code.
 
 ## Deploying
 
-1. Upload the files to `twelvesec72-cpu/Clib` on `main`.
+1. Upload the files to `twelvesec72-cpu/CLib` on `main`, flat at the repo root.
 2. Settings → Pages → Deploy from branch → `main` / `(root)`.
 3. Open the live URL, then install to the home screen on each phone
    (Android Chrome → menu → Install app; iOS Safari → Share → Add to Home Screen).
@@ -34,6 +37,18 @@ so on. Without it the installed phones keep serving the old app.
   ZXing-js is lazy-loaded from jsDelivr the first time the scanner opens (iOS
   Safari). Decoded EAN-13s are checksum-validated and must carry a `978`/`979`
   Bookland prefix before any lookup happens.
+- **Two scan modes, both confirmed.** Nothing is ever recorded from a barcode
+  alone. *One at a time* shows the book and adds it straight to the library on
+  **Add**. *Rapid* shows the book and puts it in the review queue on **Accept**,
+  where a whole batch gets its shelf, collection and status in one go. While a
+  card is up, decoding is paused, so a neighbouring spine drifting into frame
+  cannot replace the book you are looking at.
+- **Accept is live before the lookup finishes.** Tap it on the beep and the
+  title fills itself in afterwards. If that background lookup then comes back
+  as a duplicate, a miss or a network error, the row is automatically unticked
+  in the review queue — you cannot commit a book you never actually saw.
+  Duplicates are caught locally and appear on the card instantly, so accepting
+  one is always a deliberate choice and stays ticked.
 - **Metadata.** Open Library, no API key. Three endpoints are tried in order:
   `/api/books`, `/isbn/{isbn}.json`, then `/search.json?q=isbn:`. Each is
   optional — an HTTP error from one is treated as a miss and the chain

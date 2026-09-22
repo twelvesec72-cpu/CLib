@@ -242,6 +242,9 @@ label.field > span{display:block; font-size:12.5px; font-weight:650; color:var(-
 .confirmcard .t{font-size:14.5px; font-weight:650; line-height:1.3}
 .confirmcard .a{font-size:12.5px; color:var(--muted); margin-top:2px}
 .confirmcard .acts{display:flex; gap:8px; margin-top:9px}
+/* Rapid mode is one-handed: Accept takes the width, Skip stays out of the way. */
+.confirmcard .acts.accept #rcAccept{flex:1; min-height:42px; font-size:15px}
+.confirmcard .acts.accept #rcSkip{flex:none; min-height:42px}
 
 /* ----------------------------------------------------------- review queue */
 .qitem{display:flex; gap:11px; padding:11px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:9px; align-items:flex-start}
@@ -319,7 +322,7 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
 .toast.ok{border-color:var(--ok)}
 .toast .btn{margin-left:auto}
 
-.spinner{width:17px;height:17px;border:2.5px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; flex:none}
+.spinner{display:inline-block; vertical-align:-3px; width:17px;height:17px;border:2.5px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; flex:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion: reduce){ *{animation-duration:.01ms !important; transition-duration:.01ms !important} }
 </style>
@@ -363,10 +366,11 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
 
   <!-- ---------------------------------------------------------- scanner -->
   <section class="view" id="view-scan">
-    <div class="seg" style="margin-bottom:12px" role="group" aria-label="Scan mode">
+    <div class="seg" role="group" aria-label="Scan mode">
       <button id="modeConfirm" aria-pressed="true">One at a time</button>
       <button id="modeRapid" aria-pressed="false">Rapid</button>
     </div>
+    <p class="hint" id="modeHint" style="margin:7px 0 12px"></p>
     <div class="scanwrap" id="scanwrap">
       <video id="video" playsinline muted autoplay></video>
       <div class="reticle"><div class="box"></div></div>
@@ -1140,7 +1144,8 @@ function prefillEditor(d){
 const scan = {
   running:false, engine:'', stream:null, track:null,
   detector:null, reader:null, timer:null, torchOn:false,
-  lastCode:'', lastAt:0, tally:0, paused:false, audio:null
+  lastCode:'', lastAt:0, tally:0, paused:false, audio:null,
+  pending:null   // the scan awaiting Accept/Skip, in either mode
 };
 
 function setScanStatus(msg){ $('#scanStatus').textContent = msg; }
@@ -1234,6 +1239,7 @@ function stopScan(){
   $('#video').srcObject = null;
   scan.stream = null; scan.track = null; scan.detector = null;
   scan.running = false; scan.torchOn = false;
+  scan.pending = null; scan.paused = false;
   $('#btnTorch').classList.add('hide');
   $('#btnScanToggle').textContent = 'Start camera';
   setScanStatus('Camera off');
@@ -1291,6 +1297,9 @@ function beep(){
 }
 
 function onCode(raw){
+  // The ZXing callback keeps firing while a card is up; without this a second
+  // barcode drifting into frame would replace the book you are deciding about.
+  if(scan.paused) return;
   const code = cleanIsbn(raw);
   const now = Date.now();
   if(code === scan.lastCode && now - scan.lastAt < 2500) return;
@@ -1353,6 +1362,7 @@ function showConfirmCard(b, o){
 }
 function resumeScan(){
   $('#confirmSlot').innerHTML = '';
+  scan.pending = null;
   scan.paused = false;
   scan.lastCode = ''; scan.lastAt = 0;
   setScanStatus(scan.running ? 'Point at the barcode on the back cover.' : 'Camera off');
@@ -1365,32 +1375,108 @@ function afterScanAdd(){
   resumeScan();
 }
 
-/* -------- rapid -------- */
+/* -------- rapid --------
+   Nothing reaches the queue until Accept is tapped, so a stray barcode — a
+   neighbouring spine, a courier label, the same book twice — costs one tap
+   rather than a bad row to find at review time. The lookup runs while the card
+   is up and Accept is live throughout: tap it the moment you hear the beep and
+   the title fills itself in, or wait the half second and read it first. */
 async function handleRapid(isbn13){
-  if(queue.some(q => q.isbn13 === isbn13)){ setScanStatus('Already in the queue.'); return; }
+  if(queue.some(q => q.isbn13 === isbn13)){
+    setScanStatus('Already in the queue.');
+    return;
+  }
+  scan.paused = true;
   const item = { tmpId:uuid(), isbn13, state:'loading', selected:true, book:null, note:'' };
-  queue.push(item); saveQueue(); refreshQueueBadge(); refreshTally();
-  setScanStatus('Queued ' + isbn13 + ' — keep going.');
+  scan.pending = item;
+  showRapidCard(item);
+  resolveScan(item);            // deliberately not awaited
+}
 
+/** Fills in an item's book data. Safe whether the item is still the pending
+ *  card, already accepted into the queue, or discarded while in flight. */
+async function resolveScan(item){
+  const isbn13 = item.isbn13;
+  const stub = () => normaliseBook({ isbn13, isbn10:isbn13to10(isbn13), title:isbn13, source:'scan' });
   const existing = findByIsbn(isbn13);
+
   if(existing){
-    item.state = 'dup'; item.selected = false; item.note = 'Already in your library';
+    item.state = 'dup'; item.note = 'Already in your library';
     item.book = Object.assign({}, existing, { source:'scan' });
   }else{
     try{
       const found = await lookupIsbn(isbn13);
       if(found){ item.state = 'ok'; item.book = found; }
-      else { item.state = 'missing'; item.note = 'Not in Open Library'; item.selected = false;
-             item.book = normaliseBook({ isbn13, isbn10:isbn13to10(isbn13), title:isbn13, source:'scan' }); }
+      else{ item.state = 'missing'; item.note = 'Not in Open Library'; item.book = stub(); }
     }catch(err){
       item.state = 'error';
       item.note = err instanceof LookupError ? err.message : 'Lookup failed';
-      item.selected = false;
-      item.book = normaliseBook({ isbn13, isbn10:isbn13to10(isbn13), title:isbn13, source:'scan' });
+      item.book = stub();
     }
   }
+  // Accepted before the answer came back? Then the flag is news to them — leave
+  // it unticked in the queue so it cannot be committed without a second look.
+  if(item.acceptedBlind && item.state !== 'ok') item.selected = false;
+
+  if(queue.indexOf(item) !== -1){
+    saveQueue(); refreshQueueBadge();
+    if($('#view-review').classList.contains('active')) renderReview();
+  }
+  if(scan.pending === item) showRapidCard(item);
+}
+
+function showRapidCard(item){
+  const b = item.book || normaliseBook({ isbn13:item.isbn13, title:item.isbn13 });
+  const loading = item.state === 'loading';
+  const badge =
+    item.state === 'dup'     ? '<span class="tag dup">' + esc(item.note) + '</span>' :
+    (item.state === 'missing' || item.state === 'error')
+                             ? '<span class="tag bad">' + esc(item.note) + '</span>' : '';
+  setScanStatus(' ');
+  $('#confirmSlot').innerHTML =
+    '<div class="confirmcard">' + coverHtml(b) +
+      '<div class="meta">' +
+        '<div class="t">' + (loading
+            ? '<span class="spinner"></span> ' + esc(item.isbn13)
+            : esc(b.title)) + '</div>' +
+        '<div class="a">' + (loading
+            ? 'Looking it up…'
+            : esc(byline(b)) + (b.publishedYear ? ' · ' + b.publishedYear : '')) + '</div>' +
+        badge +
+        '<div class="acts accept">' +
+          '<button class="btn sm primary" id="rcAccept">Accept</button>' +
+          '<button class="btn sm" id="rcSkip">Skip</button>' +
+        '</div>' +
+      '</div></div>';
+  $('#rcAccept').onclick = acceptPending;
+  $('#rcSkip').onclick   = skipPending;
+}
+
+function acceptPending(){
+  const item = scan.pending;
+  if(!item) return;
+  // Accepting a card that already shows "Already in your library" is a
+  // deliberate choice, so it stays ticked; resolveScan only unticks the ones
+  // accepted before the answer arrived.
+  item.acceptedBlind = (item.state === 'loading');
+  item.selected = true;
+  queue.push(item);
   saveQueue(); refreshQueueBadge();
+  scan.pending = null;
+  resumeScan();
+  setScanStatus('Queued — next book.');
+  refreshTally();
   if($('#view-review').classList.contains('active')) renderReview();
+}
+function skipPending(){
+  scan.pending = null;
+  resumeScan();
+  setScanStatus('Skipped — next book.');
+}
+function applyModeHint(){
+  $('#modeHint').textContent = settings.scanMode === 'rapid'
+    ? 'Every scan waits for Accept, then joins the review queue. Assign shelf, collection and status to the whole batch at once.'
+    : 'Every scan waits for Add, and goes straight into the library on its own.';
 }
 function refreshTally(){
   const t = $('#tally');
@@ -1748,6 +1834,7 @@ function wireUp(){
     settings.scanMode = m; saveSettings();
     $('#modeConfirm').setAttribute('aria-pressed', m === 'confirm' ? 'true' : 'false');
     $('#modeRapid').setAttribute('aria-pressed', m === 'rapid' ? 'true' : 'false');
+    applyModeHint();
     resumeScan(); refreshTally();
   };
   $('#modeConfirm').onclick = () => setMode('confirm');
@@ -1823,6 +1910,7 @@ function boot(){
   $('#fSort').value = settings.sort;
   $('#modeConfirm').setAttribute('aria-pressed', settings.scanMode === 'confirm' ? 'true' : 'false');
   $('#modeRapid').setAttribute('aria-pressed', settings.scanMode === 'rapid' ? 'true' : 'false');
+  applyModeHint();
   renderCollectionFilter();
   syncFilterStyles();
   wireUp();
