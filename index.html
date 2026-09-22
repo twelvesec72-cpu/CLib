@@ -670,9 +670,12 @@ const KEY = {
   books:'clib.books', collections:'clib.collections',
   settings:'clib.settings', schema:'clib.schemaVersion', queue:'clib.queue'
 };
-/* v2 added coverPhotoId + spineColor. Nothing needs migrating — an older
-   record simply normalises to empty strings for both. */
-const SCHEMA_VERSION = 2;
+/* v2 added coverPhotoId + spineColor. Nothing needed migrating — an older
+   record simply normalises to empty strings for both.
+   v3 made light the default theme. That one DOES need a migration: every
+   install already has theme:'auto' written to disk, so a changed default
+   would never reach any of them. */
+const SCHEMA_VERSION = 3;
 let storageBroken = false;
 
 function lsGet(key, fallback){
@@ -708,23 +711,33 @@ let settings    = {};
 let queue       = [];
 
 const DEFAULT_SETTINGS = {
-  scanMode:'confirm', sort:'dateAdded', theme:'auto', view:'grid',
+  scanMode:'confirm', sort:'dateAdded', theme:'light', view:'grid',
   // offsite backup — the key doubles as the identity, so there is no username
   backupUrl:'', backupKey:'', backupUser:'', backupAuto:false,
   backupLastAt:'', backupLastMsg:'', deviceId:''
 };
+// theme:'light' above, not 'auto' — the app is built around the sunflower now,
+// and a phone in dark mode should not be the thing that decides otherwise.
+// Dark is still there, it is just a choice rather than the device's guess.
 
 function loadAll(){
   const v = lsGet(KEY.schema, null);
-  if(v === null) lsSet(KEY.schema, SCHEMA_VERSION);
-  else if(v > SCHEMA_VERSION)
+  if(v !== null && v > SCHEMA_VERSION)
     toast('This library was written by a newer version of GoughRead. Some fields may not show.', 'err', 9000);
-  // (no migrations yet — v1 is the first schema)
 
   books       = arr(lsGet(KEY.books, [])).filter(b => b && typeof b === 'object').map(normaliseBook);
   collections = arr(lsGet(KEY.collections, [])).filter(c => typeof c === 'string');
   queue       = arr(lsGet(KEY.queue, [])).filter(q => q && typeof q === 'object');
   settings    = Object.assign({}, DEFAULT_SETTINGS, lsGet(KEY.settings, {}) || {});
+
+  /* v3: light became the default. Anyone who was on 'auto' was on the old
+     default rather than a choice, so move them; anyone who had actually picked
+     dark or light keeps it. Runs once — the schema stamp is written below. */
+  if(v !== null && v < 3 && settings.theme === 'auto'){
+    settings.theme = 'light';
+    saveSettings();
+  }
+  if(v !== SCHEMA_VERSION) lsSet(KEY.schema, SCHEMA_VERSION);
   // Identifies this install in the backup snapshot list, so "200 books became
   // 12" can be traced to the tablet nobody had opened in a month.
   if(!settings.deviceId){ settings.deviceId = uuid(); saveSettings(); }
@@ -2915,6 +2928,19 @@ function manageCollection(name){
 function applyTheme(){
   if(settings.theme === 'auto') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', settings.theme);
+
+  /* The two <meta name="theme-color"> tags in the head key off the OS, not off
+     us. Now that the app can be light on a dark phone, those would leave the
+     status bar navy above an amber app. Take the colour from what is actually
+     painted instead; this tag comes last, so it wins. */
+  let tag = $('#themeColorNow');
+  if(!tag){
+    tag = document.createElement('meta');
+    tag.id = 'themeColorNow';
+    tag.name = 'theme-color';
+    document.head.appendChild(tag);
+  }
+  tag.setAttribute('content', getComputedStyle(document.body).backgroundColor);
 }
 
 /* ================================================================= views */

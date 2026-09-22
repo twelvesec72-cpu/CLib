@@ -151,6 +151,21 @@ of commas rather than as paint.
 rather than a third card colour — at a card-like tone it vanished into the
 amber and the shelf had nothing to stand on.
 
+**Light is the default**, not "match device" — the app is built around the
+sunflower, and a phone being in dark mode should not be what decides
+otherwise. Dark is still there as a choice in Settings.
+
+That needed schema **v3** and a real migration, not just a changed default:
+every existing install already had `theme:'auto'` written to disk, where a new
+default would never reach it. The migration moves anyone still on `'auto'`
+(the old default, so not a choice) and leaves anyone who actually picked light
+or dark alone. It runs once, gated on the stored schema version.
+
+It also forced a fix to the status bar: the two `<meta name="theme-color">`
+tags in the head key off the **OS**, so a light app on a dark phone got a navy
+bar above an amber screen. `applyTheme()` now appends a third tag set from the
+painted `body` background, which wins by coming last and tracks the real theme.
+
 `--accent` is a **fill** and always carries `--on-accent` text. `--accent-ink`
 is the same colour family as **type** — chrome yellow is far too pale to read
 as text, so the tab label, active filter pill and links use the ink. Keeping
