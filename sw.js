@@ -1,12 +1,18 @@
-/* Clib service worker.
-   BUMP THIS STRING ON EVERY DEPLOY or the phones keep serving the old app. */
-const CACHE = 'clib-v9';
+/* GoughRead service worker.
+   BUMP THE CACHE STRING ON EVERY DEPLOY or the phones keep serving the old app.
+
+   Both names keep the old `clib-` prefix on purpose. COVERS especially: it is
+   deliberately never bumped so cover thumbnails survive a deploy, and renaming
+   it would throw away every cached cover on every installed device. The app's
+   name is cosmetic; a cache key is an address. */
+const CACHE = 'clib-v10';
 const COVERS = 'clib-covers-v1';
 
 const SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
+  './splash.webp',
   './icon-192.png',
   './icon-512.png',
   './icon-maskable-512.png'
@@ -80,7 +86,7 @@ self.addEventListener('fetch', event => {
         const cache = await caches.open(CACHE);
         return (await cache.match('./index.html')) ||
                (await cache.match('./')) ||
-               new Response('Offline and no cached copy of Clib.', {
+               new Response('Offline and no cached copy of GoughRead.', {
                  status: 503, headers: { 'Content-Type': 'text/plain' }
                });
       }

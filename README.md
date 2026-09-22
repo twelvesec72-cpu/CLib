@@ -1,4 +1,4 @@
-# Clib
+# GoughRead
 
 A private catalogue for a physical book collection. One HTML file, no build step,
 no account, no server. Data lives in `localStorage` on the device that scanned it.
@@ -8,6 +8,16 @@ no account, no server. Data lives in `localStorage` on the device that scanned i
 The repo is `CLib` with a capital L and the Pages path is case-sensitive.
 Renaming the repo changes the URL and breaks every installed copy.
 
+**The app was called Clib until the GoughRead artwork was adopted.** The name
+is now GoughRead everywhere a person can see it. Everything a person *cannot*
+see deliberately keeps the old prefix — the `clib.*` `localStorage` keys, the
+`clib-photos` database, the `clib-v*` and `clib-covers-v1` caches, the repo,
+and the `clib-backup` service on dellcasa. Those are not labels, they are
+addresses: rename one and the installed phones come back to an empty shelf
+with nothing still pointing at the old data. Verified by loading a library
+written under the old build into the renamed app — books, collections,
+settings, photographed cover and spine colour all intact.
+
 ## Files
 
 | File | Role |
@@ -16,7 +26,9 @@ Renaming the repo changes the URL and breaks every installed copy.
 | `manifest.webmanifest` | PWA manifest |
 | `sw.js` | Service worker. **Bump `CACHE` on every deploy.** |
 | `icon-192.png`, `icon-512.png` | App icons (`purpose: any`) |
-| `icon-maskable-512.png` | Separate maskable icon, glyph inside the safe zone |
+| `icon-maskable-512.png` | Maskable icon (`purpose: maskable`) |
+| `splash.webp` | The GoughRead artwork shown on a cold start (154 KB) |
+| `admin/` | Windows key manager. **Not part of the PWA — do not upload it.** |
 
 All paths are relative (`./`), so a custom domain can be added later without
 touching the code.
@@ -86,18 +98,68 @@ have both behaviours from one element.
   anywhere. A plain browser tab may be refused, which is what the JSON backup
   is for.
 
+## Splash
+
+`splash.webp` — the GoughRead sunflower — shows on a cold start: the artwork
+fades in over about half a second, holds, and the whole layer fades out, gone
+from the DOM at ~2.9 s. Tapping skips it. `prefers-reduced-motion` gets the
+picture with no fades and a shorter hold.
+
+Three things it does deliberately:
+
+- **The amber is painted by the container, not the image.** The screen is the
+  right colour on the very first frame and stays right while the artwork
+  decodes, so the half-built app never flashes underneath — and it still looks
+  intentional if the image never loads at all.
+- **It is in the markup, not built in JS**, for the same reason.
+- **It is removed from the DOM, not left at `opacity: 0`**, where it would go
+  on swallowing every tap. Removal is on a timer rather than `transitionend`,
+  because a transition that never fires would strand the overlay over the
+  whole app.
+
+It is precached by the service worker, and the manifest's `background_color`
+matches it so the OS launch screen hands over to it without a jump.
+
+## Icons
+
+All three are the sunflower, full bleed on its amber field, generated from one
+512px source by `scratchpad/make-icons2.ps1`.
+
+The maskable one needs no extra padding: the flower measures 328px on a 512px
+canvas — 64%, against a safe zone of 80% — and sits within 2px of centre.
+Shrinking it further would only make it look small in the launcher once Android
+crops it. Checked against circle, squircle and square crops at 120px and 48px.
+
+**An installed home-screen icon does not update on redeploy.** Android and iOS
+both capture it at install time, so a phone that already has GoughRead keeps
+the old indigo book-spine icon until it is removed from the home screen and
+added again. Nothing is lost by doing that — the library lives in the browser's
+storage for the origin, not in the installed shortcut.
+
 ## Theme
 
-Van Gogh palettes: **Starry Night** (deep indigo, chrome yellow) for dark,
-**Sunflowers** (cream, ochre, umber) for light, both over two soft radial
-washes set in `--bgfx`. The top bar and tab bar are transparent so the wash
-runs edge to edge; nothing scrolls under them, so they do not need a fill.
+Van Gogh palettes: **Starry Night** (deep indigo, chrome yellow) for dark, and
+for light the **splash artwork itself, sampled**. The amber field it is painted
+on is `--bg`, its book-page creams are the card surfaces, and the brown the
+wordmark is lettered in is `--text` — so the app is the same picture the splash
+is: cream pages laid on an amber ground. `--bgfx` adds the brush strokes that
+ground is built from, as an inline SVG tile. The tile is 520 px with strokes of
+varying length, weight and angle; a small tile of uniform arcs reads as a grid
+of commas rather than as paint.
+
+`--surface-3` is only ever the shelf board, so in light it is a wood brown
+rather than a third card colour — at a card-like tone it vanished into the
+amber and the shelf had nothing to stand on.
 
 `--accent` is a **fill** and always carries `--on-accent` text. `--accent-ink`
 is the same colour family as **type** — chrome yellow is far too pale to read
-on cream, so the tab label, active filter pill and links use the ink. Keeping
-the two apart is what holds the light theme above 4.5:1. Every pair was
-measured; the worst is 4.68:1 (ink on accent-soft, light).
+as text, so the tab label, active filter pill and links use the ink. Keeping
+the two apart is what holds the light theme above 4.5:1.
+
+All 23 pairs were measured against the new ground; the worst is 4.89:1. Note
+that `--muted` and `--accent-ink` are a shade deeper than the artwork's own
+mid-browns: on an amber ground rather than a cream one, the lighter versions
+land at 4.3:1 and fail.
 
 ## How it works
 
@@ -186,8 +248,38 @@ rather than writing into someone else's library. **Test connection** answers
 | URL | `https://dellcasa.tail2b3657.ts.net:8443` — the same for everyone |
 | Key | 32 hex characters, one per person |
 
-Adding a person, on dellcasa: `~/clib-backup/add-user.sh sarah`. It prints the
-key once and `users.json` is re-read on change, so no restart.
+### Managing keys
+
+**The desktop app is the easy way**: `admin/GoughReadKeys.ps1`, launched by
+`admin/GoughRead Keys.vbs` (a `.vbs` because a `.cmd` or a shortcut straight to
+powershell.exe flashes a console first). There is a *GoughRead Keys* shortcut on the
+Windows desktop. It lists everyone with their book count, cover count and how
+long since their last backup — **red once a week has passed with no backup**,
+which is the whole point, since a silent backup failure is otherwise invisible.
+Buttons for add, show key, rotate and remove.
+
+It holds no state: every button is one SSH call to `~/clib-backup/admin.sh`,
+which answers in JSON. The server's `users.json` stays the only source of
+truth, so the app and the shell scripts are interchangeable.
+
+On dellcasa directly, in `~/clib-backup`. `users.json` is re-read when it
+changes, so none of these need a restart:
+
+| | |
+| --- | --- |
+| `./add-user.sh sarah` | new person, prints their key |
+| `./show-key.sh` | list who exists, no keys shown |
+| `./show-key.sh sarah` | print an existing key again, e.g. for a second device |
+| `./rotate-key.sh sarah` | new key, old one dead, their backups untouched |
+| `./admin.sh <cmd> [name]` | the JSON version of all of the above, plus `list` and `remove` |
+
+Keys are stored in plain text in `users.json` (chmod 600; the server only
+hashes them in memory), so a forgotten key is looked up, not lost. Rotation is
+for a leak or a lost phone, not for forgetfulness.
+
+`remove` revokes a key but **deliberately leaves `data/<name>` alone** —
+withdrawing someone's access should never be the same action as destroying
+their only backup. Re-adding them later gets a new key and the same folder.
 
 ### Two phases, so a repeat backup sends nothing
 

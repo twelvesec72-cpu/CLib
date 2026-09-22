@@ -3,17 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f7efd8">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ecca76">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#121a33">
-<meta name="description" content="Clib — a private catalogue for a physical book collection.">
+<link rel="preload" as="image" href="./splash.webp">
+<meta name="description" content="GoughRead — a private catalogue for a physical book collection.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Clib">
+<meta name="apple-mobile-web-app-title" content="GoughRead">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link rel="icon" href="./icon-192.png">
-<title>Clib</title>
+<title>GoughRead</title>
 <style>
 /* ---------------------------------------------------------------- tokens */
 /* Light = Sunflowers, dark = Starry Night.
@@ -22,25 +23,36 @@
    text on a cream ground, so anything that draws the accent as type uses the
    ink instead. Keeping them separate is what holds the light theme above
    4.5:1 while still looking properly yellow. */
+/* The light theme is sampled from the GoughRead splash: the amber field it is
+   painted on becomes --bg, its book-page creams become the card surfaces, and
+   the brown the wordmark is lettered in becomes the text. So the app is the
+   same picture the splash is — cream pages laid on an amber ground. */
 :root{
-  --bg:#f7efd8;
-  --surface:#fffaeb;
-  --surface-2:#efe0b9;
-  --surface-3:#e3cf9c;
-  --text:#3a2f16;
-  --muted:#6f5d2f;
-  --border:#ddc994;
+  --splash-bg:#e6c25c;    /* the field colour, straight off the artwork */
+  --bg:#ecca76;
+  --surface:#fdf4dd;      /* the pages */
+  --surface-2:#f4e4b5;
+  --surface-3:#b5862f;    /* only ever the shelf board — wood, not another card */
+  --text:#43260a;         /* the wordmark's ink */
+  /* the two inks are a shade deeper than the artwork's mid-browns: on an amber
+     ground rather than a cream one, the lighter versions land at 4.3:1 */
+  --muted:#6d4a13;
+  --border:#d9bb78;
   --accent:#e8a712;
-  --accent-ink:#8a5a00;
-  --accent-soft:#f6e3b4;
-  --on-accent:#2a1f04;
-  --danger:#9e2b18;
-  --danger-soft:#f7dcd4;
-  --ok:#22603c;
-  --warn:#8a5a00;
-  --warn-soft:#f6e3b4;
-  --bgfx:radial-gradient(120% 85% at 18% 0%, rgba(224,160,20,.20), transparent 58%),
-         radial-gradient(110% 80% at 88% 22%, rgba(110,142,214,.16), transparent 62%);
+  --accent-ink:#6f4505;
+  --accent-soft:#f8e7b8;
+  --on-accent:#3a2003;
+  --danger:#94240f;
+  --danger-soft:#f7d9cf;
+  --ok:#1d5b34;
+  --warn:#6f4505;
+  --warn-soft:#f8e7b8;
+  /* Two soft washes, over the brush strokes the artwork's ground is built
+     from. A big tile with strokes of varying length, weight and angle — a
+     small one with uniform arcs reads as a grid of commas, not as paint. */
+  --bgfx:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='520' height='520' viewBox='0 0 520 520'%3E%3Cg fill='none' stroke='%238d6a22' stroke-linecap='round'%3E%3Cpath d='M18 58q58-26 104-4' stroke-width='7' stroke-opacity='.10'/%3E%3Cpath d='M152 26q44 18 86 2' stroke-width='5' stroke-opacity='.07'/%3E%3Cpath d='M300 74q38-30 88-16' stroke-width='6' stroke-opacity='.09'/%3E%3Cpath d='M432 22q34 12 72 30' stroke-width='4' stroke-opacity='.06'/%3E%3Cpath d='M44 168q70-20 112 10' stroke-width='6' stroke-opacity='.08'/%3E%3Cpath d='M196 142q52 24 96-6' stroke-width='8' stroke-opacity='.10'/%3E%3Cpath d='M336 190q44-34 96-10' stroke-width='5' stroke-opacity='.07'/%3E%3Cpath d='M8 262q46 8 82-14' stroke-width='6' stroke-opacity='.09'/%3E%3Cpath d='M128 300q64-22 108 6' stroke-width='4' stroke-opacity='.06'/%3E%3Cpath d='M282 272q40 26 92 8' stroke-width='7' stroke-opacity='.09'/%3E%3Cpath d='M418 320q36-20 94-4' stroke-width='5' stroke-opacity='.07'/%3E%3Cpath d='M30 386q56-28 106-2' stroke-width='6' stroke-opacity='.08'/%3E%3Cpath d='M180 420q48 18 90-8' stroke-width='4' stroke-opacity='.06'/%3E%3Cpath d='M320 396q52-24 100 2' stroke-width='7' stroke-opacity='.10'/%3E%3Cpath d='M74 486q62-18 104 8' stroke-width='5' stroke-opacity='.07'/%3E%3Cpath d='M242 500q44-22 96-6' stroke-width='6' stroke-opacity='.08'/%3E%3Cpath d='M406 468q40 22 86 6' stroke-width='4' stroke-opacity='.06'/%3E%3C/g%3E%3C/svg%3E"),
+         radial-gradient(120% 85% at 18% 0%, rgba(255,235,178,.42), transparent 58%),
+         radial-gradient(110% 80% at 88% 22%, rgba(168,114,20,.16), transparent 62%);
   --radius:14px;
   --radius-sm:9px;
   --shadow:0 1px 2px rgba(0,0,0,.06), 0 10px 30px rgba(0,0,0,.07);
@@ -113,6 +125,33 @@ body{
   overflow:hidden;
   overscroll-behavior:none;
 }
+/* ---------------------------------------------------------------- splash */
+/* The amber is painted by the container, not the image, so the screen is the
+   right colour from frame one and stays right while the artwork decodes — and
+   still looks deliberate if the image never arrives at all. The artwork fades
+   in over it, then the whole layer fades away. */
+#splash{
+  position:fixed; inset:0; z-index:300;
+  background:var(--splash-bg);
+  display:grid; place-items:center;
+  opacity:1;
+  transition:opacity .55s ease-in;
+  overflow:hidden;
+}
+#splash img{
+  width:100%; height:100%;
+  object-fit:cover; object-position:center;
+  opacity:0;
+  animation:splashArt .55s ease-out .08s forwards;
+}
+#splash.out{opacity:0}
+@keyframes splashArt{to{opacity:1}}
+/* Reduced motion gets the picture, just not the movement. */
+@media (prefers-reduced-motion: reduce){
+  #splash{transition:none}
+  #splash img{animation:none; opacity:1}
+}
+
 h1,h2,h3{margin:0; font-weight:650; letter-spacing:-.01em}
 button,input,select,textarea{font:inherit; color:inherit}
 button{cursor:pointer}
@@ -445,6 +484,10 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
 </head>
 <body>
 
+<!-- In the markup rather than built in JS, so the amber covers the screen on
+     the very first frame. Otherwise the half-built app flashes underneath it. -->
+<div id="splash" aria-hidden="true"><img src="./splash.webp" alt=""></div>
+
 <!-- ============================================================== chrome -->
 <header class="topbar">
   <h1 id="topTitle">Library <span class="count" id="bookCount"></span></h1>
@@ -537,7 +580,7 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
       </div>
       <button class="btn wide" id="btnImportCsv">Import a backup…</button>
       <input type="file" id="fileCsv" accept=".json,.csv,application/json,text/csv" class="hide">
-      <p class="hint">Takes either a Clib JSON backup or a CSV.</p>
+      <p class="hint">Takes either a GoughRead JSON backup or a CSV.</p>
     </div>
 
     <div class="card">
@@ -584,7 +627,7 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
       <button class="btn danger wide" id="btnClearAll">Delete everything</button>
     </div>
 
-    <p class="hint" style="text-align:center">Clib v1 · data lives only on this device</p>
+    <p class="hint" style="text-align:center">GoughRead · data lives only on this device</p>
   </section>
 </main>
 
@@ -613,10 +656,16 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
 <script>
 "use strict";
 /* ======================================================================
-   Clib — single-file book catalogue PWA.  Phase 1: local-only.
+   GoughRead — single-file book catalogue PWA.  Phase 1: local-only.
    ====================================================================== */
 
 /* ------------------------------------------------------------- storage */
+/* !! DO NOT RENAME THESE TO MATCH THE APP !!
+   The app was called Clib when these keys were written. They are the address
+   of every installed copy's library — change the prefix and every phone that
+   updates comes back to an empty shelf with no way to get the old one back,
+   because nothing would still be pointing at it. The same goes for PHOTO_DB
+   below. The name is cosmetic; these are not. */
 const KEY = {
   books:'clib.books', collections:'clib.collections',
   settings:'clib.settings', schema:'clib.schemaVersion', queue:'clib.queue'
@@ -669,7 +718,7 @@ function loadAll(){
   const v = lsGet(KEY.schema, null);
   if(v === null) lsSet(KEY.schema, SCHEMA_VERSION);
   else if(v > SCHEMA_VERSION)
-    toast('This library was written by a newer version of Clib. Some fields may not show.', 'err', 9000);
+    toast('This library was written by a newer version of GoughRead. Some fields may not show.', 'err', 9000);
   // (no migrations yet — v1 is the first schema)
 
   books       = arr(lsGet(KEY.books, [])).filter(b => b && typeof b === 'object').map(normaliseBook);
@@ -735,6 +784,8 @@ function uuid(){
    they live in IndexedDB as Blobs: stored by reference on disk, no base64
    inflation, no 5 MB ceiling. The book record holds only the photo's id, which
    keeps the library itself as small as it was. */
+/* Named before the app was — see the warning on KEY. Renaming this orphans
+   every photographed cover on every installed device. */
 const PHOTO_DB = 'clib-photos', PHOTO_STORE = 'covers';
 let photoDbPromise = null;
 
@@ -807,7 +858,7 @@ async function sweepPhotos(){
     const live = new Set(books.map(b => b.coverPhotoId).filter(Boolean));
     const dead = keys.filter(k => !live.has(k));
     for(const k of dead){ forgetPhotoUrl(k); await photoDel(k); }
-    if(dead.length) console.info('[clib] swept', dead.length, 'orphan cover photo(s)');
+    if(dead.length) console.info('[goughread] swept', dead.length, 'orphan cover photo(s)');
     return dead.length;
   }catch(err){ return 0; }   // no photo store on this browser: nothing to sweep
 }
@@ -2330,7 +2381,7 @@ function parseCsv(text){
 }
 function exportCsv(list, name){
   const data = list || books;
-  download(name || ('bookshelf-backup-' + today() + '.csv'), booksToCsv(data), 'text/csv');
+  download(name || ('goughread-backup-' + today() + '.csv'), booksToCsv(data), 'text/csv');
 }
 /* The API key must never leave the device inside a file. An export lands in
    Downloads and gets mailed around; the key would hand whoever received it
@@ -2349,7 +2400,7 @@ async function buildBackupDoc(opts){
   const inline = !!(opts && opts.inlinePhotos);
   const ids = [...new Set(books.map(b => b.coverPhotoId).filter(Boolean))];
   const doc = {
-    app:'clib', schemaVersion:SCHEMA_VERSION, exportedAt:new Date().toISOString(),
+    app:'goughread', schemaVersion:SCHEMA_VERSION, exportedAt:new Date().toISOString(),
     deviceId: str(settings.deviceId), deviceName: deviceName(),
     books, collections, settings: exportableSettings(),
     photoIds: ids
@@ -2386,7 +2437,7 @@ async function exportJson(name){
   if(built.partial)
     toast('The cover photos could not be read — the books were exported without them.', 'err', 7000);
   const text = JSON.stringify(built.doc);
-  download(name || ('bookshelf-backup-' + today() + '.json'), text, 'application/json');
+  download(name || ('goughread-backup-' + today() + '.json'), text, 'application/json');
   return { photos: built.photos, bytes: text.length };
 }
 
@@ -2432,7 +2483,7 @@ function rowsToBooks(rows){
   const head = rows[0].map(h => h.trim().replace(/^﻿/,''));
   const idx = {};
   CSV_HEADER.forEach(k => { idx[k] = head.indexOf(k); });
-  if(idx.title < 0) throw new Error('No “title” column — this does not look like a Clib export.');
+  if(idx.title < 0) throw new Error('No “title” column — this does not look like a GoughRead export.');
   const out = [];
   for(let r = 1; r < rows.length; r++){
     const cells = rows[r];
@@ -2467,7 +2518,7 @@ function startImport(file){
       try{ doc = JSON.parse(text); }
       catch(err){ toast('That JSON could not be parsed.', 'err', 6000); return; }
       if(!doc || !Array.isArray(doc.books)){
-        toast('That file has no “books” list — it is not a Clib backup.', 'err', 6000); return;
+        toast('That file has no “books” list — it is not a GoughRead backup.', 'err', 6000); return;
       }
       const incoming = doc.books.filter(b => b && typeof b === 'object').map(normaliseBook);
       if(!incoming.length){ toast('No books in that backup.', 'err'); return; }
@@ -2542,7 +2593,7 @@ function chooseImportMode(incoming, filename, photoSource, markedNoPhoto){
     sheetCloser = null;
     // JSON, not CSV: the safety net has to include the photographed covers,
     // which exist nowhere else and cannot be looked up again
-    if(books.length) await exportJson('bookshelf-before-replace-' + today() + '.json');
+    if(books.length) await exportJson('goughread-before-replace-' + today() + '.json');
     const ok = await confirmDialog({
       title:'Replace the whole library?',
       bodyHtml:'This deletes all <b>' + books.length + '</b> books on this device and loads the ' +
@@ -2705,7 +2756,7 @@ async function maybeAutoBackup(){
   if(backupSince() < 60 * 60 * 1000) return;     // at most hourly
   const r = await runBackup({ manual:false });
   if(r && r.ok === false && backupSince() > 7 * 86400000)
-    toast('Clib has not backed up for a week — check the backup settings.', 'err', 9000);
+    toast('GoughRead has not backed up for a week — check the backup settings.', 'err', 9000);
 }
 
 async function openServerRestore(){
@@ -3036,8 +3087,39 @@ function wireUp(){
   document.addEventListener('visibilitychange', () => { if(document.hidden && scan.running) stopScan(); });
 }
 
+/* ---------------------------------------------------------------- splash */
+/* Shown on a cold start only — it lives in the markup, so a resumed PWA that
+   never reloads never sees it again. Removed from the DOM at the end rather
+   than left at opacity 0, where it would keep swallowing taps. */
+function runSplash(){
+  const el = $('#splash');
+  if(!el) return;
+  const slow = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const hold = slow ? 1100 : 2300;      // in + hold; the fade out runs after
+  let gone = false;
+
+  const finish = () => {
+    if(gone) return;
+    gone = true;
+    el.classList.add('out');
+    // the timer, not transitionend — a fade that never fires must not strand
+    // the overlay over the whole app
+    setTimeout(() => { el.remove(); }, slow ? 0 : 600);
+  };
+
+  // impatience is a legitimate input
+  el.addEventListener('click', finish);
+  el.addEventListener('touchstart', finish, { passive:true });
+  const timer = setTimeout(finish, hold);
+  // nothing decorative should survive the app being backgrounded
+  document.addEventListener('visibilitychange', () => {
+    if(document.hidden){ clearTimeout(timer); finish(); }
+  });
+}
+
 /* ------------------------------------------------------------ boot + sw */
 function boot(){
+  runSplash();
   loadAll();
   applyTheme();
   $('#fSort').value = settings.sort;
@@ -3071,7 +3153,7 @@ function boot(){
   if(navigator.storage && navigator.storage.persist){
     navigator.storage.persisted()
       .then(yes => yes ? true : navigator.storage.persist())
-      .then(ok => { if(!ok) console.info('[clib] storage is not persistent — keep exporting backups'); })
+      .then(ok => { if(!ok) console.info('[goughread] storage is not persistent — keep exporting backups'); })
       .catch(() => {});
   }
 }
