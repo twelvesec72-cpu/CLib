@@ -31,6 +31,19 @@ touching the code.
 **On every redeploy, edit the first line of `sw.js`** — `clib-v1` → `clib-v2` and
 so on. Without it the installed phones keep serving the old app.
 
+## Theme
+
+Van Gogh palettes: **Starry Night** (deep indigo, chrome yellow) for dark,
+**Sunflowers** (cream, ochre, umber) for light, both over two soft radial
+washes set in `--bgfx`. The top bar and tab bar are transparent so the wash
+runs edge to edge; nothing scrolls under them, so they do not need a fill.
+
+`--accent` is a **fill** and always carries `--on-accent` text. `--accent-ink`
+is the same colour family as **type** — chrome yellow is far too pale to read
+on cream, so the tab label, active filter pill and links use the ink. Keeping
+the two apart is what holds the light theme above 4.5:1. Every pair was
+measured; the worst is 4.68:1 (ink on accent-soft, light).
+
 ## How it works
 
 - **Scanning.** `BarcodeDetector` where it exists (Android Chrome); otherwise
