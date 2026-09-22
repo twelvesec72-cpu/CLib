@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ecca76">
-<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#121a33">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#172955">
 <link rel="preload" as="image" href="./splash.webp">
 <meta name="description" content="GoughRead — a private catalogue for a physical book collection.">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -53,6 +53,12 @@
   --bgfx:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='520' height='520' viewBox='0 0 520 520'%3E%3Cg fill='none' stroke='%238d6a22' stroke-linecap='round'%3E%3Cpath d='M18 58q58-26 104-4' stroke-width='7' stroke-opacity='.10'/%3E%3Cpath d='M152 26q44 18 86 2' stroke-width='5' stroke-opacity='.07'/%3E%3Cpath d='M300 74q38-30 88-16' stroke-width='6' stroke-opacity='.09'/%3E%3Cpath d='M432 22q34 12 72 30' stroke-width='4' stroke-opacity='.06'/%3E%3Cpath d='M44 168q70-20 112 10' stroke-width='6' stroke-opacity='.08'/%3E%3Cpath d='M196 142q52 24 96-6' stroke-width='8' stroke-opacity='.10'/%3E%3Cpath d='M336 190q44-34 96-10' stroke-width='5' stroke-opacity='.07'/%3E%3Cpath d='M8 262q46 8 82-14' stroke-width='6' stroke-opacity='.09'/%3E%3Cpath d='M128 300q64-22 108 6' stroke-width='4' stroke-opacity='.06'/%3E%3Cpath d='M282 272q40 26 92 8' stroke-width='7' stroke-opacity='.09'/%3E%3Cpath d='M418 320q36-20 94-4' stroke-width='5' stroke-opacity='.07'/%3E%3Cpath d='M30 386q56-28 106-2' stroke-width='6' stroke-opacity='.08'/%3E%3Cpath d='M180 420q48 18 90-8' stroke-width='4' stroke-opacity='.06'/%3E%3Cpath d='M320 396q52-24 100 2' stroke-width='7' stroke-opacity='.10'/%3E%3Cpath d='M74 486q62-18 104 8' stroke-width='5' stroke-opacity='.07'/%3E%3Cpath d='M242 500q44-22 96-6' stroke-width='6' stroke-opacity='.08'/%3E%3Cpath d='M406 468q40 22 86 6' stroke-width='4' stroke-opacity='.06'/%3E%3C/g%3E%3C/svg%3E"),
          radial-gradient(120% 85% at 18% 0%, rgba(255,235,178,.42), transparent 58%),
          radial-gradient(110% 80% at 88% 22%, rgba(168,114,20,.16), transparent 62%);
+  /* Geometry for whatever --bgfx happens to be. Light wants the defaults: a
+     tile, repeated, at its own size. Dark paints a picture instead and
+     overrides all three. */
+  --bgfx-size:auto;
+  --bgfx-pos:0 0;
+  --bgfx-repeat:repeat;
   --radius:14px;
   --radius-sm:9px;
   --shadow:0 1px 2px rgba(0,0,0,.06), 0 10px 30px rgba(0,0,0,.07);
@@ -78,8 +84,21 @@
     --ok:#7fd4a8;
     --warn:#f2c14e;
     --warn-soft:#3a3218;
-    --bgfx:radial-gradient(120% 85% at 18% 0%, rgba(242,193,78,.14), transparent 58%),
-           radial-gradient(110% 80% at 88% 22%, rgba(90,130,230,.22), transparent 62%);
+    /* Dark is the starry village now, not two washes. It is one picture, so it
+       is covered and never repeated — a second horizon halfway up the screen
+       reads as a mistake instantly. Anchored to the bottom, which puts the
+       rooftops behind the tab bar and gives the sky everything above them.
+       No wash on top: at any opacity worth seeing, amber over a night sky
+       turns it grey. --bg stays underneath as the colour the screen is while
+       the file is still on its way. */
+    --bgfx:url("./goughread-bg-starry-g-village.svg");
+    --bgfx-size:cover;
+    --bgfx-pos:bottom center;
+    --bgfx-repeat:no-repeat;
+    /* Sampled from the top edge of that sky, at the horizontal centre. The
+       topbar is transparent, so the status bar has to match the picture rather
+       than --bg, or it sits there as a darker band above it. */
+    --status:#172955;
     --shadow:0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.45);
   }
 }
@@ -100,8 +119,12 @@
   --ok:#7fd4a8;
   --warn:#f2c14e;
   --warn-soft:#3a3218;
-  --bgfx:radial-gradient(120% 85% at 18% 0%, rgba(242,193,78,.14), transparent 58%),
-         radial-gradient(110% 80% at 88% 22%, rgba(90,130,230,.22), transparent 62%);
+  /* Same scene as the media-query block above, where it is explained. */
+  --bgfx:url("./goughread-bg-starry-g-village.svg");
+  --bgfx-size:cover;
+  --bgfx-pos:bottom center;
+  --bgfx-repeat:no-repeat;
+  --status:#172955;
   --shadow:0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.45);
 }
 
@@ -115,7 +138,10 @@ html{height:100%}
 body{
   margin:0; color:var(--text);
   background-color:var(--bg);
-  background-image:var(--bgfx);   /* two soft washes; the chrome sits over them */
+  background-image:var(--bgfx);   /* washes in light, the night scene in dark */
+  background-size:var(--bgfx-size);
+  background-position:var(--bgfx-pos);
+  background-repeat:var(--bgfx-repeat);
   font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
   -webkit-text-size-adjust:100%;
   -webkit-tap-highlight-color:transparent;
@@ -2940,7 +2966,11 @@ function applyTheme(){
     tag.name = 'theme-color';
     document.head.appendChild(tag);
   }
-  tag.setAttribute('content', getComputedStyle(document.body).backgroundColor);
+  /* --bg is the right answer in light, where the top of the screen really is
+     that colour. In dark the top of the screen is the night-sky artwork, so
+     that theme sets --status to the colour sampled from it and it wins. */
+  const cs = getComputedStyle(document.body);
+  tag.setAttribute('content', cs.getPropertyValue('--status').trim() || cs.backgroundColor);
 }
 
 /* ================================================================= views */
