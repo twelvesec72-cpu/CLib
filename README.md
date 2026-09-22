@@ -37,12 +37,22 @@ so on. Without it the installed phones keep serving the old app.
   ZXing-js is lazy-loaded from jsDelivr the first time the scanner opens (iOS
   Safari). Decoded EAN-13s are checksum-validated and must carry a `978`/`979`
   Bookland prefix before any lookup happens.
+- **The decode loop is ours, not ZXing's.** `decodeContinuously` re-runs on
+  failure with a **0 ms** delay against the full native-resolution frame, which
+  pins a core flat out and starves the video preview on an iPhone, and it only
+  reschedules itself for three specific exception types — any other throw (such
+  as a frame arriving before iOS reports `videoWidth`) stops it permanently and
+  silently. Instead there is a self-scheduling loop that never overlaps, and
+  frames are downscaled to 760 px, alternating the centre band with the whole
+  frame. Measured on the same machine: 62 ms → 27 ms per empty frame, and
+  15 ms → 3 ms when a barcode is actually present.
 - **Two scan modes, both confirmed.** Nothing is ever recorded from a barcode
-  alone. *One at a time* shows the book and adds it straight to the library on
-  **Add**. *Rapid* shows the book and puts it in the review queue on **Accept**,
-  where a whole batch gets its shelf, collection and status in one go. While a
-  card is up, decoding is paused, so a neighbouring spine drifting into frame
-  cannot replace the book you are looking at.
+  alone. *One at a time* does not decode at all until you tap **Scan**, then
+  shows the book and adds it to the library on **Add**. *Rapid* reads
+  continuously and puts each book in the review queue on **Accept**, where a
+  whole batch gets its shelf, collection and status in one go. While a card is
+  up, decoding is paused, so a neighbouring spine drifting into frame cannot
+  replace the book you are looking at.
 - **Accept is live before the lookup finishes.** Tap it on the beep and the
   title fills itself in afterwards. If that background lookup then comes back
   as a duplicate, a miss or a network error, the row is automatically unticked

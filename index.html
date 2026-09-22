@@ -252,6 +252,18 @@ label.field > span{display:block; font-size:12.5px; font-weight:650; color:var(-
   position:absolute; left:10px; right:10px; bottom:10px; padding:9px 12px; border-radius:11px;
   background:rgba(0,0,0,.66); color:#fff; font-size:13.5px; text-align:center;
 }
+.scanwrap.has-shutter .status{bottom:78px}
+.shutter{
+  position:absolute; left:50%; bottom:14px; transform:translateX(-50%);
+  min-height:52px; padding:0 26px; border:0; border-radius:26px;
+  background:var(--accent); color:var(--on-accent);
+  font-size:16px; font-weight:700; letter-spacing:.01em;
+  display:inline-flex; align-items:center; gap:9px; white-space:nowrap;
+  box-shadow:0 6px 22px rgba(0,0,0,.45);
+}
+.shutter svg{width:20px;height:20px}
+.shutter:active{transform:translateX(-50%) scale(.95)}
+.shutter[disabled]{opacity:.75}
 .seg{display:flex; background:var(--surface-2); border-radius:11px; padding:3px; gap:3px}
 .seg button{flex:1; min-height:38px; border:0; border-radius:8px; background:transparent; color:var(--muted); font-size:13.5px; font-weight:650}
 .seg button[aria-pressed="true"]{background:var(--surface); color:var(--text); box-shadow:0 1px 2px rgba(0,0,0,.12)}
@@ -404,6 +416,10 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M13 2L4.5 13H11l-1 9 8.5-11H12l1-9z"/></svg>
       </button>
       <div class="status" id="scanStatus">Camera off</div>
+      <button class="shutter hide" id="btnShoot">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M3 8V5.5A1.5 1.5 0 014.5 4H7M17 4h2.5A1.5 1.5 0 0121 5.5V8M21 16v2.5a1.5 1.5 0 01-1.5 1.5H17M7 20H4.5A1.5 1.5 0 013 18.5V16"/><path d="M7 8v8M10 8v8M13.5 8v8M17 8v8" stroke-width="1.6"/></svg>
+        Scan
+      </button>
       <div id="confirmSlot"></div>
     </div>
     <div class="row" style="margin-bottom:12px">
@@ -1184,6 +1200,7 @@ async function pickEngine(){
   }
   return 'zxing';
 }
+const ZXING_URL = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
 function loadScript(src){
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
@@ -1192,6 +1209,77 @@ function loadScript(src){
     s.onerror = () => reject(new Error('Could not load the barcode library. It needs a connection the first time.'));
     document.head.appendChild(s);
   });
+}
+
+/** iOS reports videoWidth 0 for the first frames after play(); decoding then
+ *  throws and — in ZXing's own loop — never restarts. Wait it out. */
+function waitForVideoFrames(v){
+  return new Promise(resolve => {
+    if(v.videoWidth && v.videoHeight) return resolve();
+    let settled = false;
+    const done = () => {
+      if(settled) return;
+      settled = true;
+      ['loadedmetadata','loadeddata','canplay','playing'].forEach(e => v.removeEventListener(e, done));
+      clearTimeout(timer);
+      resolve();
+    };
+    ['loadedmetadata','loadeddata','canplay','playing'].forEach(e => v.addEventListener(e, done));
+    const timer = setTimeout(done, 4000);   // give up waiting; the tick self-guards
+  });
+}
+
+/** Self-scheduling loop. Never overlaps its own work, unlike setInterval, and
+ *  never spins at 0ms, which is what ZXing's built-in driver does on failure. */
+function runTicks(fn, ms){
+  const loop = async () => {
+    if(!scan.running) return;
+    try{ await fn(); }catch(err){ /* a bad frame must not kill the loop */ }
+    if(scan.running) scan.timer = setTimeout(loop, ms);
+  };
+  scan.timer = setTimeout(loop, ms);
+}
+
+/* Decoding a full 1280x720 frame with TRY_HARDER is far too slow on a phone.
+   Draw a downscaled copy — alternating the centre band, where a barcode held
+   in the reticle lands, with the whole frame for anything off-centre. */
+const decodeCanvas = document.createElement('canvas');
+function drawForDecode(src, sw, sh, band){
+  const bh = band ? Math.round(sh * 0.55) : sh;
+  const sy = Math.round((sh - bh) / 2);
+  const k = Math.min(1, 760 / sw);
+  const w = Math.max(1, Math.round(sw * k));
+  const h = Math.max(1, Math.round(bh * k));
+  if(decodeCanvas.width !== w)  decodeCanvas.width = w;
+  if(decodeCanvas.height !== h) decodeCanvas.height = h;
+  decodeCanvas.getContext('2d', { willReadFrequently:true })
+    .drawImage(src, 0, sy, sw, bh, 0, 0, w, h);
+  return decodeCanvas;
+}
+/** ZXing over whatever is currently on decodeCanvas. '' when nothing is found. */
+function decodeCanvasZxing(){
+  const Z = window.ZXing;
+  const lum = new Z.HTMLCanvasElementLuminanceSource(decodeCanvas);
+  const res = scan.reader.decodeBitmap(new Z.BinaryBitmap(new Z.HybridBinarizer(lum)));
+  return res ? res.getText() : '';
+}
+function zxingTick(){
+  if(!scan.running || scan.paused || !scan.reader) return;
+  const v = $('#video');
+  if(!v.videoWidth || !v.videoHeight){ stallHint(); return; }
+  drawForDecode(v, v.videoWidth, v.videoHeight, (scan.frame++ % 2) === 0);
+  try{
+    const text = decodeCanvasZxing();
+    if(text){ scan.gotAny = true; onCode(text); return; }
+  }catch(err){ /* NotFoundException on most frames is entirely normal */ }
+  stallHint();
+}
+/** After a while with nothing read, say something useful instead of nothing. */
+function stallHint(){
+  if(scan.hinted || scan.gotAny || scan.paused || !scan.startedAt) return;
+  if(Date.now() - scan.startedAt < 9000) return;
+  scan.hinted = true;
+  setScanStatus('No barcode yet — more light, fill the white box, hold still. Or tap Type ISBN.');
 }
 
 async function startScan(){
@@ -1207,6 +1295,7 @@ async function startScan(){
   }
   scan.running = true;
   scan.paused = false;
+  scan.frame = 0; scan.hinted = false; scan.gotAny = false;
   $('#btnScanToggle').textContent = 'Stop camera';
   setScanStatus('Starting camera…');
 
@@ -1214,32 +1303,38 @@ async function startScan(){
     scan.engine = await pickEngine();
     $('#scanEngine').textContent = scan.engine === 'native'
       ? 'Using the built-in barcode detector.'
-      : 'Using ZXing — slower, but works on iOS Safari.';
+      : 'Using ZXing — slower than Android, so fill the white box and hold steady.';
 
-    const constraints = { audio:false, video:{ facingMode:{ ideal:'environment' }, width:{ ideal:1280 }, height:{ ideal:720 } } };
+    // Fetch the decoder while the camera is warming up rather than before it.
+    const decoderReady = (scan.engine === 'native' || window.ZXing)
+      ? Promise.resolve()
+      : loadScript(ZXING_URL);
 
+    scan.stream = await navigator.mediaDevices.getUserMedia({
+      audio:false,
+      video:{ facingMode:{ ideal:'environment' }, width:{ ideal:1280 }, height:{ ideal:720 } }
+    });
+    const v = $('#video');
+    v.setAttribute('playsinline', '');   // iOS refuses to inline a video without it
+    v.muted = true;
+    v.srcObject = scan.stream;
+    await v.play().catch(() => {});
+    await waitForVideoFrames(v);
+
+    await decoderReady;
     if(scan.engine === 'native'){
-      scan.stream = await navigator.mediaDevices.getUserMedia(constraints);
-      const v = $('#video');
-      v.srcObject = scan.stream;
-      await v.play().catch(() => {});
       scan.detector = new window.BarcodeDetector({ formats:['ean_13'] });
-      scan.timer = setInterval(nativeTick, 180);
     }else{
-      if(!window.ZXing) await loadScript('https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js');
       const hints = new Map();
       hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, [window.ZXing.BarcodeFormat.EAN_13]);
       hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
-      scan.reader = new window.ZXing.BrowserMultiFormatReader(hints, 260);
-      await scan.reader.decodeFromConstraints(constraints, $('#video'), (result) => {
-        if(result) onCode(result.getText());
-      });
-      scan.stream = $('#video').srcObject;
+      scan.reader = new window.ZXing.BrowserMultiFormatReader(hints);
     }
 
     scan.track = scan.stream ? scan.stream.getVideoTracks()[0] : null;
     setupTorch();
-    setScanStatus('Point at the barcode on the back cover.');
+    scan.startedAt = Date.now();
+    applyScanMode();          // starts the loop only in rapid mode
     refreshTally();
   }catch(err){
     console.error(err);
@@ -1258,17 +1353,86 @@ async function startScan(){
   }
 }
 function stopScan(){
-  if(scan.timer){ clearInterval(scan.timer); scan.timer = null; }
-  if(scan.reader){ try{ scan.reader.reset(); }catch(err){} scan.reader = null; }
+  scan.running = false;                       // stops runTicks rescheduling
+  if(scan.timer){ clearTimeout(scan.timer); scan.timer = null; }
+  scan.reader = null;
   if(scan.stream){ scan.stream.getTracks().forEach(t => { try{ t.stop(); }catch(err){} }); }
   $('#video').srcObject = null;
   scan.stream = null; scan.track = null; scan.detector = null;
-  scan.running = false; scan.torchOn = false;
-  scan.pending = null; scan.paused = false;
+  scan.torchOn = false;
+  scan.pending = null; scan.paused = false; scan.startedAt = 0;
   $('#btnTorch').classList.add('hide');
   $('#btnScanToggle').textContent = 'Start camera';
   setScanStatus('Camera off');
   $('#confirmSlot').innerHTML = '';
+  applyScanMode();
+}
+
+/* One at a time = the camera previews but decodes nothing until you tap Scan.
+   Rapid = decode continuously and wait for Accept. Manual capture is also much
+   lighter on an iPhone, which cannot decode a video stream in real time. */
+function applyScanMode(){
+  const manual = settings.scanMode === 'confirm';
+  const showShutter = manual && scan.running && !scan.paused;
+  $('#btnShoot').classList.toggle('hide', !showShutter);
+  $('#scanwrap').classList.toggle('has-shutter', showShutter);
+
+  if(scan.timer){ clearTimeout(scan.timer); scan.timer = null; }
+  if(scan.running && !manual){
+    runTicks(scan.engine === 'native' ? nativeTick : zxingTick,
+             scan.engine === 'native' ? 170 : 90);
+  }
+  if(scan.running && !scan.paused){
+    setScanStatus(manual ? 'Line up the barcode, then tap Scan.'
+                         : 'Point at the barcode on the back cover.');
+  }
+}
+
+/** Decode the current frame(s) on demand. Tries for a moment rather than
+ *  grabbing exactly one frame, because the first one is often motion-blurred. */
+async function decodeCurrentFrame(){
+  const v = $('#video');
+  if(!v.videoWidth || !v.videoHeight) return '';
+  try{
+    if(scan.engine === 'native' && scan.detector){
+      const hits = await scan.detector.detect(decodeCanvas);
+      if(hits && hits.length) return hits[0].rawValue;
+    }else if(scan.reader){
+      return decodeCanvasZxing();
+    }
+  }catch(err){ /* not found on this frame */ }
+  return '';
+}
+async function shoot(){
+  if(!scan.running || scan.paused || scan.shooting) return;
+  const btn = $('#btnShoot');
+  const label = btn.innerHTML;
+  scan.shooting = true;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Reading…';
+  setScanStatus(' ');          // the button already says it; don't say it twice
+
+  const v = $('#video');
+  const deadline = Date.now() + 1800;
+  let found = '', n = 0;
+  while(!found && Date.now() < deadline && scan.running){
+    if(v.videoWidth && v.videoHeight){
+      drawForDecode(v, v.videoWidth, v.videoHeight, (n++ % 2) === 0);
+      found = await decodeCurrentFrame();
+    }
+    if(!found) await new Promise(r => setTimeout(r, 55));
+  }
+
+  scan.shooting = false;
+  btn.disabled = false;
+  btn.innerHTML = label;
+  if(found){
+    scan.lastCode = ''; scan.lastAt = 0;   // a deliberate tap is never a repeat
+    onCode(found);
+  }else{
+    setScanStatus('No barcode found — fill the box, add light, try again.');
+    if(navigator.vibrate) try{ navigator.vibrate([18,55,18]); }catch(err){}
+  }
 }
 async function nativeTick(){
   if(!scan.running || scan.paused || !scan.detector) return;
@@ -1370,6 +1534,7 @@ async function handleConfirm(isbn13){
 }
 function showConfirmCard(b, o){
   setScanStatus(' ');
+  applyScanMode();            // the card sits where the Scan button does
   const slot = $('#confirmSlot');
   slot.innerHTML =
     '<div class="confirmcard">' + coverHtml(b) +
@@ -1390,7 +1555,8 @@ function resumeScan(){
   scan.pending = null;
   scan.paused = false;
   scan.lastCode = ''; scan.lastAt = 0;
-  setScanStatus(scan.running ? 'Point at the barcode on the back cover.' : 'Camera off');
+  if(scan.running) applyScanMode();
+  else setScanStatus('Camera off');
 }
 function afterScanAdd(){
   scan.tally++;
@@ -1458,6 +1624,7 @@ function showRapidCard(item){
     (item.state === 'missing' || item.state === 'error')
                              ? '<span class="tag bad">' + esc(item.note) + '</span>' : '';
   setScanStatus(' ');
+  applyScanMode();
   $('#confirmSlot').innerHTML =
     '<div class="confirmcard">' + coverHtml(b) +
       '<div class="meta">' +
@@ -1500,8 +1667,8 @@ function skipPending(){
 }
 function applyModeHint(){
   $('#modeHint').textContent = settings.scanMode === 'rapid'
-    ? 'Each scan waits for Accept, then joins the review queue for batch tagging.'
-    : 'Each scan waits for Add, then goes straight into the library.';
+    ? 'Reads continuously. Each book waits for Accept, then joins the review queue.'
+    : 'Reads only when you tap Scan. Each book waits for Add, then goes into the library.';
 }
 function refreshTally(){
   const t = $('#tally');
@@ -1865,6 +2032,7 @@ function wireUp(){
   $('#modeConfirm').onclick = () => setMode('confirm');
   $('#modeRapid').onclick   = () => setMode('rapid');
   $('#btnScanToggle').onclick = () => { if(scan.running){ stopScan(); } else { primeAudio(); startScan(); } };
+  $('#btnShoot').onclick = () => shoot();
   $('#btnTypeIsbn').onclick = () => {
     openSheet('Type an ISBN',
       '<label class="field"><span>ISBN-10 or ISBN-13</span>' +
