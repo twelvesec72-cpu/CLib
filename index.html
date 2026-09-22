@@ -1207,7 +1207,13 @@ const scan = {
   pending:null   // the scan awaiting Accept/Skip, in either mode
 };
 
-function setScanStatus(msg){ $('#scanStatus').textContent = msg; }
+/** Empty message hides the pill entirely, rather than leaving a blank slab. */
+function setScanStatus(msg){
+  const el = $('#scanStatus');
+  const t = (msg === null || msg === undefined) ? '' : String(msg).trim();
+  el.textContent = t;
+  el.classList.toggle('hide', t === '');
+}
 
 async function pickEngine(){
   if('BarcodeDetector' in window){
@@ -1400,10 +1406,9 @@ function applyScanMode(){
     runTicks(scan.engine === 'native' ? nativeTick : zxingTick,
              scan.engine === 'native' ? 170 : 90);
   }
-  if(scan.running && !scan.paused){
-    setScanStatus(manual ? 'Line up the barcode, then tap Scan.'
-                         : 'Point at the barcode on the back cover.');
-  }
+  // No standing instruction in either mode; the status line is kept for things
+  // that actually happen (queued, skipped, nothing found, camera failed).
+  if(scan.running && !scan.paused) setScanStatus('');
 }
 
 /** Decode the current frame(s) on demand. Tries for a moment rather than
