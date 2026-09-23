@@ -5,7 +5,7 @@
    deliberately never bumped so cover thumbnails survive a deploy, and renaming
    it would throw away every cached cover on every installed device. The app's
    name is cosmetic; a cache key is an address. */
-const CACHE = 'clib-v12';
+const CACHE = 'clib-v13';
 const COVERS = 'clib-covers-v1';
 
 const SHELL = [

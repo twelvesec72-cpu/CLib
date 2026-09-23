@@ -612,10 +612,8 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
     <div class="card">
       <h3>Backup to my server</h3>
       <p>Sends the library and its cover photos to your own server, so losing
-      the phone does not lose the shelf.</p>
-      <label class="field"><span>Server URL</span>
-        <input type="url" id="bkUrl" placeholder="https://example.ts.net:8443"
-               autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+      the phone does not lose the shelf. Paste your key and that is the setup.</p>
+      <p class="hint" style="margin:0 0 10px">Server: <b id="bkServer">&mdash;</b></p>
       <label class="field"><span>Your key</span>
         <input type="password" id="bkKey" placeholder="32 characters"
                autocomplete="off" autocapitalize="none" spellcheck="false"></label>
@@ -694,14 +692,24 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
    below. The name is cosmetic; these are not. */
 const KEY = {
   books:'clib.books', collections:'clib.collections',
-  settings:'clib.settings', schema:'clib.schemaVersion', queue:'clib.queue'
+  settings:'clib.settings', schema:'clib.schemaVersion', queue:'clib.queue',
+  /* The backup key sits in its OWN entry rather than inside the settings blob.
+     If that blob ever fails to parse — a half-written value, a quota failure
+     mid-write — it falls back to defaults and is then saved over the original,
+     and everything that was in it is gone. The books survive that, which is
+     exactly why it goes unnoticed. The one value in there that cannot be
+     rebuilt by pressing a button is the key, so it does not live in there. */
+  backupKey:'clib.backupKey'
 };
 /* v2 added coverPhotoId + spineColor. Nothing needed migrating — an older
    record simply normalises to empty strings for both.
    v3 made light the default theme. That one DOES need a migration: every
    install already has theme:'auto' written to disk, so a changed default
-   would never reach any of them. */
-const SCHEMA_VERSION = 3;
+   would never reach any of them.
+   v4 moved the backup key out of the settings blob into its own localStorage
+   entry, and the server URL out of settings entirely and into the code. The
+   migration carries an existing key across. */
+const SCHEMA_VERSION = 4;
 let storageBroken = false;
 
 function lsGet(key, fallback){
@@ -735,11 +743,15 @@ let books       = [];
 let collections = [];
 let settings    = {};
 let queue       = [];
+/* Deliberately not a property of `settings`. See KEY.backupKey above. */
+let backupKey   = '';
 
 const DEFAULT_SETTINGS = {
   scanMode:'confirm', sort:'dateAdded', theme:'light', view:'grid',
-  // offsite backup — the key doubles as the identity, so there is no username
-  backupUrl:'', backupKey:'', backupUser:'', backupAuto:false,
+  /* Offsite backup. The URL is a constant in the code and the key is its own
+     localStorage entry, so neither is in here: what is left is only the stuff
+     that can be thrown away and rebuilt by pressing Test connection. */
+  backupUser:'', backupAuto:false,
   backupLastAt:'', backupLastMsg:'', deviceId:''
 };
 // theme:'light' above, not 'auto' — the app is built around the sunflower now,
@@ -763,6 +775,16 @@ function loadAll(){
     settings.theme = 'light';
     saveSettings();
   }
+  /* v4: carry an existing key out of the settings blob into its own entry.
+     The stray backupUrl/backupKey properties are dropped on the way past, so
+     an old blob stops carrying them around and re-saving them. */
+  const stray = settings.backupKey;
+  delete settings.backupKey;
+  delete settings.backupUrl;
+  backupKey = str(lsGet(KEY.backupKey, ''));
+  if(!backupKey && stray){ backupKey = str(stray); lsSet(KEY.backupKey, backupKey); }
+  if(stray !== undefined) saveSettings();
+
   if(v !== SCHEMA_VERSION) lsSet(KEY.schema, SCHEMA_VERSION);
   // Identifies this install in the backup snapshot list, so "200 books became
   // 12" can be traced to the tablet nobody had opened in a month.
@@ -2424,7 +2446,10 @@ function exportCsv(list, name){
 }
 /* The API key must never leave the device inside a file. An export lands in
    Downloads and gets mailed around; the key would hand whoever received it
-   write access to the backup server. */
+   write access to the backup server. As of schema v4 the key is not in
+   `settings` at all, so the delete below can no longer find anything — it
+   stays as the guard it has always been, in case something ever puts it back.
+   */
 function exportableSettings(){
   const s = Object.assign({}, settings);
   delete s.backupKey;
@@ -2646,16 +2671,21 @@ function chooseImportMode(incoming, filename, photoSource, markedNoPhoto){
 }
 
 /* ================================================= backup to my server */
-/* One URL and one key. The key IS the identity — the server maps it to a
-   person and scopes every read and write to their own directory — so there is
-   no username to type and no second thing to get wrong. */
+/* One key, and nothing else. The key IS the identity — the server maps it to
+   a person and scopes every read and write to their own directory — so there
+   is no username to type and no second thing to get wrong.
+
+   The server is the same box for everyone, so it is a constant here rather
+   than a field. A URL nobody can mistype is a URL that never generates a
+   support call, and it cannot be lost along with a device's settings either.
+   Changing it means a deploy, which is about the right amount of ceremony for
+   moving the server that everybody's library backs up to. */
+const BACKUP_URL = 'https://dellcasa.tail2b3657.ts.net:8443';
 
 class BackupError extends Error {}
 
 function backupCfg(){
-  const url = str(settings.backupUrl).replace(/\/+$/, '');
-  const key = str(settings.backupKey);
-  return { url, key, ok: !!(url && key) };
+  return { url: BACKUP_URL.replace(/\/+$/, ''), key: backupKey, ok: !!backupKey };
 }
 
 async function apiFetch(path, opts){
@@ -2672,7 +2702,7 @@ async function apiFetch(path, opts){
   }catch(err){
     // fetch rejects the same way for DNS, TLS, CORS and being offline, so the
     // message has to cover all of them rather than guess
-    throw new BackupError('Could not reach the server — check the URL, and that you are online.');
+    throw new BackupError('Could not reach the server — check that you are online, and that it is up.');
   }
 }
 /** apiFetch plus the status codes this API actually uses. 409 comes back for
@@ -2876,10 +2906,9 @@ function renderSettings(){
   $('#fTheme').value = settings.theme;
 }
 function renderBackupCard(){
-  const url = $('#bkUrl'); if(!url) return;
-  if(document.activeElement !== url) url.value = settings.backupUrl || '';
-  const key = $('#bkKey');
-  if(document.activeElement !== key) key.value = settings.backupKey || '';
+  const key = $('#bkKey'); if(!key) return;
+  $('#bkServer').textContent = BACKUP_URL.replace(/^https?:\/\//i, '');
+  if(document.activeElement !== key) key.value = backupKey;
   $('#bkAuto').checked = !!settings.backupAuto;
 
   const cfg = backupCfg();
@@ -3064,22 +3093,26 @@ function wireUp(){
   };
 
   /* ---- backup to my server ---- */
-  const saveBackupField = (el, prop) => {
-    el.onchange = () => {
-      const v = el.value.trim();
-      if(settings[prop] === v) return;
-      settings[prop] = v;
-      settings.backupUser = '';        // a changed URL or key is a different identity
-      saveSettings(); renderBackupCard();
-    };
+  $('#bkKey').onchange = e => {
+    const el = $('#bkKey'), v = el.value.trim();
+    /* The buttons below fire a synthetic change first, to commit whatever is
+       sitting in the field before they run. So an EMPTY field arriving that
+       way is not the user clearing anything — it is the field having come
+       back blank on its own, which a password input does after a reload or a
+       refused autofill. Treating that as "forget my key" is how a working
+       setup quietly becomes "Not set up." again. Only a real, user-fired
+       event is allowed to clear it. */
+    if(!v && !e.isTrusted){ el.value = backupKey; return; }
+    if(backupKey === v) return;
+    backupKey = v;
+    lsSet(KEY.backupKey, backupKey);
+    settings.backupUser = '';          // a different key is a different person
+    saveSettings(); renderBackupCard();
   };
-  saveBackupField($('#bkUrl'), 'backupUrl');
-  saveBackupField($('#bkKey'), 'backupKey');
 
   $('#bkTest').onclick = async () => {
-    $('#bkUrl').dispatchEvent(new Event('change'));
     $('#bkKey').dispatchEvent(new Event('change'));
-    if(!backupCfg().ok){ toast('Enter the server URL and your key first.', 'err'); return; }
+    if(!backupCfg().ok){ toast('Paste your key first.', 'err'); return; }
     const busy = busyToast('Checking…');
     try{
       const r = await apiJson('/whoami');
@@ -3100,12 +3133,11 @@ function wireUp(){
     renderBackupCard();
   };
   $('#bkNow').onclick = () => {
-    $('#bkUrl').dispatchEvent(new Event('change'));
     $('#bkKey').dispatchEvent(new Event('change'));
     runBackup({ manual:true });
   };
   $('#bkRestore').onclick = () => {
-    if(!backupCfg().ok){ toast('Enter the server URL and your key first.', 'err'); return; }
+    if(!backupCfg().ok){ toast('Paste your key first.', 'err'); return; }
     openServerRestore();
   };
   $('#bkAuto').onchange = e => {
