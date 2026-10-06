@@ -28,6 +28,8 @@ settings, photographed cover and spine colour all intact.
 | `icon-192.png`, `icon-512.png` | App icons (`purpose: any`) |
 | `icon-maskable-512.png` | Maskable icon (`purpose: maskable`) |
 | `splash.webp` | The GoughRead artwork shown on a cold start (154 KB) |
+| `goughread-bg-starry-g-village.svg` | The dark theme's night-sky background (19 KB) |
+| `young-serif.woff2` | The display serif for headings and book titles (27 KB, in `sw.js` SHELL so it works offline) |
 | `admin/` | Windows key manager. **Not part of the PWA — do not upload it.** |
 
 All paths are relative (`./`), so a custom domain can be added later without
@@ -45,8 +47,32 @@ so on. Without it the installed phones keep serving the old app.
 
 ## Views
 
-Grid, list, and **shelf** — spines standing side by side, cycled with the icon
-in the top bar.
+Grid, list, and **shelf** — spines standing side by side, picked with the
+three-way switch above the books (the current one is highlighted). When a
+search or filter is hiding books, "3 of 14 shown · Clear" appears beside it.
+
+**UI ported from the Android app, 2026-10-06 (`clib-v15`).** The Android fork
+(`..\GoughRead-Android`) went through a 27-item UX review. Everything that
+applies to a browser was brought back here:
+- **Book card:** a one-tap Want / Reading / Read switch on the card, which
+  stamps the finished date. Status shown as cover badges (tick / open book)
+  and in words in list view, with its own colour for Reading.
+- **Editor:** a discard-changes prompt, a pinned Save, the "More details" fold,
+  shelf suggestions and errors next to the field.
+- **Review:** options collapsed into one row; choices survive lookups.
+- **Lists and scanning:** each tab keeps its own scroll position, the camera
+  auto-starts once permission has been given, and the full splash plays only
+  on the first launch.
+- **Accessibility:** press feedback, a focus ring, dialog semantics with focus
+  trap, polite live toasts, labels, a 44px+ minimum size for anything tappable
+  and a 12px text floor.
+- **Look:** Young Serif headings and a tablet layout.
+
+Kept from this copy and not changed: the server backup, the service worker, the
+`clib.*` keys and the schema. Not ported because they are Android-only: the
+share-sheet export, the Haptics plugin (vibration uses `navigator.vibrate`
+here), the Back button, the native launch screen and the in-app privacy policy.
+The settings footer shows the deploy version, read from the `sw.js` cache name.
 
 The spines are **drawn, not photographed**. No spine-image source exists (Open
 Library holds front covers only), and `covers.openlibrary.org` sends no CORS
@@ -147,6 +173,29 @@ ground is built from, as an inline SVG tile. The tile is 520 px with strokes of
 varying length, weight and angle; a small tile of uniform arcs reads as a grid
 of commas rather than as paint.
 
+Dark has artwork of its own: `goughread-bg-starry-g-village.svg`, a night sky
+over a village skyline, painted as the `body` background. It is **one picture,
+not a tile** — `cover`, `no-repeat`, anchored `bottom center`, so the rooftops
+sit behind the tab bar and the sky takes everything above them. A second
+horizon halfway up the screen reads as a mistake instantly, which is why the
+repeat is off. Nothing is washed over it: at any opacity worth seeing, the
+amber gradient light used to carry turned the sky grey, so the two washes were
+dropped rather than dimmed. `--bg` stays underneath as the colour the screen
+is while the file is still arriving.
+
+The topbar and tabbar are transparent, so text does land on the picture. Every
+one of those labels was measured against the brightest pixel actually behind
+its own box: the worst is the active tab at 4.89:1, and the sky's own brightest
+point puts `--muted` at 5.35:1. The status bar needed a change too — it used to
+take `body`'s background colour, which in dark is no longer what the top of the
+screen looks like. The dark themes now set `--status` to `#172955`, sampled
+from the top edge of the sky at the horizontal centre, and `applyTheme()`
+prefers it when it is set. Light leaves it unset and keeps the old behaviour.
+
+Because `--bgfx` is now a picture in one theme and a tile in the other, its
+geometry is themed alongside it: `--bgfx-size`, `--bgfx-pos` and `--bgfx-repeat`
+carry the defaults in light and the cover/bottom/no-repeat set in dark.
+
 `--surface-3` is only ever the shelf board, so in light it is a wood brown
 rather than a third card colour — at a card-like tone it vanished into the
 amber and the shelf had nothing to stand on.
@@ -164,7 +213,8 @@ or dark alone. It runs once, gated on the stored schema version.
 It also forced a fix to the status bar: the two `<meta name="theme-color">`
 tags in the head key off the **OS**, so a light app on a dark phone got a navy
 bar above an amber screen. `applyTheme()` now appends a third tag set from the
-painted `body` background, which wins by coming last and tracks the real theme.
+painted `body` background (or `--status`, where a theme sets one), which wins
+by coming last and tracks the real theme.
 
 `--accent` is a **fill** and always carries `--on-accent` text. `--accent-ink`
 is the same colour family as **type** — chrome yellow is far too pale to read
@@ -252,16 +302,39 @@ Settings → **Backup to my server** pushes the library and its cover photos to
 `clib-backup` on dellcasa, reachable from anywhere with **nothing installed on
 the phone**.
 
-**Setup is one URL and one key.** There is no username and no login: the key
-*is* the identity. The server maps it to a person and scopes every read and
-write to that person's own directory, so a mis-pasted key fails with a 401
-rather than writing into someone else's library. **Test connection** answers
-*Connected as sarah*, which is how you know it landed right.
+**Setup is one key.** Nothing else. There is no username, no login and no URL
+to type: the key *is* the identity. The server maps it to a person and scopes
+every read and write to that person's own directory, so a mis-pasted key fails
+with a 401 rather than writing into someone else's library. **Test connection**
+answers *Connected as sarah*, which is how you know it landed right.
 
-| | |
-| --- | --- |
-| URL | `https://dellcasa.tail2b3657.ts.net:8443` — the same for everyone |
-| Key | 32 hex characters, one per person |
+The server is the same box for everyone, so it is the constant `BACKUP_URL` in
+`index.html` rather than a field. A URL nobody can mistype never generates a
+support call, and it cannot be lost with the rest of a device's settings.
+Moving the server means a deploy — which is about the right amount of ceremony
+for changing where everybody's library backs up to.
+
+### Where the key is kept
+
+In its own localStorage entry, `clib.backupKey`, **not** inside the
+`clib.settings` blob. If that blob ever fails to parse — a half-written value,
+a quota failure mid-write — it falls back to the defaults and is then saved
+over the original, and everything in it is gone. The books live under their own
+keys and survive that, which is exactly why it goes unnoticed: the library is
+fine and the backup has quietly switched itself off.
+
+Everything else the backup keeps in `settings` (`backupUser`, `backupAuto`,
+`backupLastAt`, `backupLastMsg`) is rebuilt by pressing **Test connection**. The
+key was the only value in there that could not be, so it is the only one that
+moved out. Schema **v4** carries an existing key across.
+
+There is a second way it used to go missing. **Test connection** and **Back up
+now** fire a synthetic `change` on the key field first, to commit whatever has
+been typed before they run. A password input that has come back blank on its
+own — after a reload, or an autofill that did not restore — then looked
+exactly like the user clearing the field, and the empty value was saved over
+the real key. The handler now ignores a blank that arrives on an untrusted
+event; only a real, user-fired one can clear the key.
 
 ### Managing keys
 
@@ -348,10 +421,21 @@ books actually kept, then anything orphaned is swept.
 
 `localStorage`: `clib.books`, `clib.collections`, `clib.settings`,
 `clib.schemaVersion`, `clib.queue` (the un-reviewed rapid-mode scans, so ten
-scans survive a reload).
+scans survive a reload), and `clib.backupKey` — on its own, deliberately, for
+the reason given under [Where the key is kept](#where-the-key-is-kept).
 
 IndexedDB: database `clib-photos`, store `covers`, keyed by `id`, one record
 per photographed cover — `{ id, blob, bytes, addedAt }`.
 
-Schema v2 added `coverPhotoId` and `spineColor` to the book record. Nothing
-needs migrating: a v1 record normalises to empty strings for both.
+Schema history:
+
+| | |
+| --- | --- |
+| v2 | added `coverPhotoId` and `spineColor` to the book record. Nothing to migrate: a v1 record normalises to empty strings for both. |
+| v3 | light became the default theme. Migrates anyone still on `'auto'`, which was the old default rather than a choice. |
+| v4 | the backup key moved to `clib.backupKey` and the server URL into the code. Migrates an existing key out of the settings blob, and strips the stray `backupUrl`/`backupKey` properties on the way past. |
+| v4 (Oct 2026, no bump) | added `dateFinished` (`YYYY-MM-DD` or `''`) to the book record, plus a `dateFinished` CSV column. Nothing to migrate: older records and CSVs normalise to `''`. Choosing **Read** in the editor offers today's date; the field is editable and may be left blank. The date is kept if a book moves off Read. |
+
+Changing a value in `DEFAULT_SETTINGS` alone never reaches an existing install
+— settings are persisted on first run, so the stored blob always wins. A
+changed default needs a schema-gated migration in `loadAll()`.
