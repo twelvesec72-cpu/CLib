@@ -251,7 +251,7 @@ main{
 .icon-btn.plain{border-color:transparent;background:transparent}
 
 input[type=text],input[type=search],input[type=number],input[type=url],
-input[type=password],select,textarea{
+input[type=password],input[type=date],select,textarea{
   width:100%; min-height:var(--tap); padding:9px 11px;
   background:var(--surface); border:1px solid var(--border);
   border-radius:var(--radius-sm); outline:none;
@@ -825,6 +825,10 @@ function normaliseBook(b){
     shelf: str(b.shelf),
     collections: Array.isArray(b.collections) ? b.collections.map(str).filter(Boolean) : [],
     readStatus: ['want','reading','read'].includes(b.readStatus) ? b.readStatus : 'want',
+    // the day it was finished, as a plain local date (YYYY-MM-DD), or ''.
+    // Kept if the status later moves off Read, so a slip or a re-read never
+    // throws the original date away. Older records simply normalise to ''.
+    dateFinished: /^\d{4}-\d{2}-\d{2}$/.test(str(b.dateFinished)) ? str(b.dateFinished) : '',
     source: ['scan','ocr','manual'].includes(b.source) ? b.source : 'manual',
     dateAdded: str(b.dateAdded) || new Date().toISOString(),
     dateUpdated: str(b.dateUpdated) || str(b.dateAdded) || new Date().toISOString()
@@ -1042,6 +1046,14 @@ function today(){
   const d = new Date(), p = n => String(n).padStart(2,'0');
   return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate());
 }
+/** "2026-10-06" → "Oct 6, 2026". Built from parts, not new Date(string): that
+ *  parses as UTC midnight and shows the day before anywhere west of London. */
+function fmtDay(ymd){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd || '');
+  if(!m) return '';
+  return new Date(+m[1], +m[2] - 1, +m[3])
+    .toLocaleDateString(undefined, { day:'numeric', month:'short', year:'numeric' });
+}
 
 /* -------------------------------------------------------------- ISBN --- */
 function cleanIsbn(s){ return String(s||'').replace(/[^0-9Xx]/g,'').toUpperCase(); }
@@ -1230,7 +1242,13 @@ function addBook(b){
 function updateBook(id, patch){
   const i = books.findIndex(b => b.id === id);
   if(i < 0) return null;
+  const was = books[i].readStatus;
   books[i] = normaliseBook(Object.assign({}, books[i], patch, { id, dateUpdated:new Date().toISOString() }));
+  // Switching a book TO Read stamps today, unless the caller said what the
+  // date is (the editor always does, even when blank on purpose) or one is
+  // already on record from an earlier read.
+  if(was !== 'read' && books[i].readStatus === 'read' &&
+     !('dateFinished' in patch) && !books[i].dateFinished) books[i].dateFinished = today();
   books[i].collections.forEach(ensureCollection);
   saveBooks();
   return books[i];
@@ -1486,6 +1504,7 @@ function openDetail(id){
       '<div><h2>' + esc(b.title) + '</h2><div class="by">' + esc(byline(b)) + '</div></div></div>' +
     '<dl class="facts">' +
       fact('Status', statusWord) +
+      fact('Finished', b.readStatus === 'read' ? fmtDay(b.dateFinished) : '') +
       fact('Series', b.series ? (b.series + (b.seriesVolume !== null ? ' #' + b.seriesVolume : '')) : '') +
       fact('Publisher', b.publisher) +
       fact('Published', b.publishedYear) +
@@ -1533,6 +1552,9 @@ function openEditor(book){
       ['want','reading','read'].map(v => '<option value="' + v + '"' + (b.readStatus === v ? ' selected' : '') + '>' +
         ({want:'Want to read',reading:'Reading',read:'Read'})[v] + '</option>').join('') +
     '</select></label>' +
+    // only meaningful once a book is Read; blank is allowed (date unknown)
+    '<label class="field' + (b.readStatus === 'read' ? '' : ' hide') + '" id="eFinishedRow"><span>Finished reading</span>' +
+      '<input type="date" id="eFinished" max="' + today() + '" value="' + esc(b.dateFinished) + '"></label>' +
     '<div class="field"><span class="flabel">Cover</span>' +
       '<div class="coveredit">' +
         '<div class="cover" id="eCoverPrev">' +
@@ -1559,6 +1581,14 @@ function openEditor(book){
       '<div class="row" style="margin-top:9px"><input type="text" id="eNewColl" placeholder="New collection">' +
       '<button class="btn sm" id="eAddColl" style="flex:none">Add</button></div></div>' +
     '<button class="btn primary wide" id="eSave" style="margin-top:8px">' + (isNew ? 'Add to library' : 'Save changes') + '</button>');
+
+  // choosing Read offers today's date; the field stays editable, and can be
+  // cleared if the date is unknown
+  $('#eStatus').onchange = e => {
+    const v = e.target.value;
+    $('#eFinishedRow').classList.toggle('hide', v !== 'read');
+    if(v === 'read' && b.readStatus !== 'read' && !$('#eFinished').value) $('#eFinished').value = today();
+  };
 
   const wire = () => $$('#eColls .chip').forEach(ch =>
     ch.onclick = () => ch.setAttribute('aria-pressed', ch.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'));
@@ -1653,6 +1683,8 @@ function openEditor(book){
       pageCount: $('#ePages').value,
       shelf: $('#eShelf').value.trim(),
       readStatus: $('#eStatus').value,
+      // always passed, even blank, so updateBook never stamps over a choice
+      dateFinished: $('#eFinished').value,
       coverUrl: $('#eCover').value.trim(),
       collections: $$('#eColls .chip[aria-pressed="true"]').map(c => c.dataset.coll)
     };
@@ -2398,7 +2430,7 @@ function renderReview(){
    re-photographing. The JSON backup is the one that keeps the pictures. */
 const CSV_HEADER = ['id','isbn13','isbn10','title','authors','series','seriesVolume','publisher',
                     'publishedYear','pageCount','shelf','collections','readStatus','coverUrl',
-                    'coverPhoto','dateAdded'];
+                    'coverPhoto','dateAdded','dateFinished'];
 
 function csvCell(v){
   const s = (v === null || v === undefined) ? '' : String(v);
@@ -2413,7 +2445,7 @@ function booksToCsv(list){
       b.publishedYear === null ? '' : b.publishedYear,
       b.pageCount === null ? '' : b.pageCount,
       b.shelf, b.collections.join('|'), b.readStatus, b.coverUrl,
-      b.coverPhotoId ? 'yes' : '', b.dateAdded
+      b.coverPhotoId ? 'yes' : '', b.dateAdded, b.dateFinished
     ].map(csvCell).join(','));
   });
   return '﻿' + rows.join('\r\n') + '\r\n';
@@ -2564,6 +2596,7 @@ function rowsToBooks(rows){
       collections: get('collections').split('|').map(s => s.trim()).filter(Boolean),
       readStatus: get('readStatus').trim().toLowerCase(),
       coverUrl: get('coverUrl'), dateAdded: get('dateAdded'),
+      dateFinished: get('dateFinished').trim(),   // absent in older exports: ''
       source: 'manual'
     }));
   }
