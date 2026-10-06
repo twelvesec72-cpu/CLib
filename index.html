@@ -47,6 +47,11 @@
   --ok:#1d5b34;
   --warn:#6f4505;
   --warn-soft:#f8e7b8;
+  /* "Reading" used to borrow --warn, which in light is the same brown as
+     --muted ("want to read") at 1.04:1 — the two statuses were
+     indistinguishable. Starry Night blue: 5.1:1 on the amber, 7.4:1 on cards. */
+  --reading:#2b4f8c;
+  --chev:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236d4a13' stroke-width='2.5' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>");
   /* Two soft washes, over the brush strokes the artwork's ground is built
      from. A big tile with strokes of varying length, weight and angle — a
      small one with uniform arcs reads as a grid of commas, not as paint. */
@@ -63,6 +68,7 @@
   --radius-sm:9px;
   --shadow:0 1px 2px rgba(0,0,0,.06), 0 10px 30px rgba(0,0,0,.07);
   --tap:44px;
+  --serif:"Young Serif", Georgia, "Times New Roman", serif;
   --safe-b:env(safe-area-inset-bottom, 0px);
   --safe-t:env(safe-area-inset-top, 0px);
 }
@@ -84,6 +90,8 @@
     --ok:#7fd4a8;
     --warn:#f2c14e;
     --warn-soft:#3a3218;
+    --reading:#f2c14e;
+    --chev:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239fadd8' stroke-width='2.5' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>");
     /* Dark is the starry village now, not two washes. It is one picture, so it
        is covered and never repeated — a second horizon halfway up the screen
        reads as a mistake instantly. Anchored to the bottom, which puts the
@@ -119,6 +127,8 @@
   --ok:#7fd4a8;
   --warn:#f2c14e;
   --warn-soft:#3a3218;
+  --reading:#f2c14e;
+  --chev:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239fadd8' stroke-width='2.5' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>");
   /* Same scene as the media-query block above, where it is explained. */
   --bgfx:url("./goughread-bg-starry-g-village.svg");
   --bgfx-size:cover;
@@ -129,6 +139,14 @@
 }
 
 /* ----------------------------------------------------------------- base */
+/* One display serif, served with the app (young-serif.woff2, ~27 KB, in sw.js SHELL) so it works
+   offline. It has a single weight, so everything set in it is weight 400 —
+   letting the browser fake a bold smears it. */
+@font-face{
+  font-family:"Young Serif";
+  src:url("./young-serif.woff2") format("woff2");
+  font-weight:400; font-style:normal; font-display:swap;
+}
 *,*::before,*::after{box-sizing:border-box}
 html{height:100%}
 /* A fixed app shell: the page itself never scrolls, only <main> does. This is
@@ -193,8 +211,8 @@ a{color:var(--accent-ink)}
   border-bottom:1px solid var(--border);
   display:flex; align-items:center; gap:10px;
 }
-.topbar h1{font-size:20px; flex:1; min-width:0; display:flex; align-items:baseline; gap:8px}
-.topbar h1 .count{font-size:13px; font-weight:500; color:var(--muted)}
+.topbar h1{font-family:var(--serif); font-weight:400; font-size:22px; flex:1; min-width:0; display:flex; align-items:baseline; gap:8px}
+.topbar h1 .count{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; font-size:13px; font-weight:500; color:var(--muted)}
 main{
   flex:1 1 auto; min-height:0;
   overflow-y:auto; overflow-x:hidden;
@@ -216,16 +234,16 @@ main{
 }
 .tabbar button{
   background:none; border:0; padding:8px 4px 10px; min-height:var(--tap);
-  color:var(--muted); font-size:11px; font-weight:600;
+  color:var(--muted); font-size:12px; font-weight:600;
   display:flex; flex-direction:column; align-items:center; gap:3px; position:relative;
 }
-.tabbar button[aria-selected="true"]{color:var(--accent-ink)}
+.tabbar button[aria-current="page"]{color:var(--accent-ink)}
 .tabbar svg{width:23px;height:23px}
 .tabbar .badge{
   position:absolute; top:3px; left:calc(50% + 7px);
   min-width:17px; height:17px; padding:0 4px; border-radius:9px;
   background:var(--accent); color:var(--on-accent);
-  font-size:10px; line-height:17px; font-weight:700;
+  font-size:11px; line-height:17px; font-weight:700;
 }
 
 /* ------------------------------------------------------------- controls */
@@ -239,7 +257,12 @@ main{
 .btn.primary{background:var(--accent); border-color:var(--accent); color:var(--on-accent)}
 .btn.danger{background:var(--danger-soft); border-color:transparent; color:var(--danger)}
 .btn.ghost{background:transparent; border-color:transparent}
-.btn.sm{min-height:36px; padding:0 11px; font-size:13.5px; border-radius:8px}
+.btn.sm{min-height:40px; padding:0 12px; font-size:14px; border-radius:8px; position:relative}
+/* Visual size stays compact; the tappable area reaches 48px, Android's minimum. */
+.btn.sm::after, .chip::after{content:""; position:absolute; inset:-4px 0}
+.btn.ghost.dangertext{color:var(--danger)}
+.linkbtn{background:none; border:0; padding:0; color:var(--accent-ink); font:inherit; font-weight:650; text-decoration:underline; text-underline-offset:2px; cursor:pointer; position:relative}
+.linkbtn::after{content:""; position:absolute; inset:-12px -6px}
 .btn.wide{width:100%}
 .btn:disabled{opacity:.45; cursor:default}
 .icon-btn{
@@ -249,6 +272,22 @@ main{
 }
 .icon-btn svg{width:21px;height:21px}
 .icon-btn.plain{border-color:transparent;background:transparent}
+
+/* Press feedback. The browser's own tap flash is switched off on <body>, and
+   before this nothing replaced it, so a tap gave no sign it had landed. Short
+   and transform-only, so it never shifts layout. */
+.btn, .icon-btn, .chip, .result, .seg button, .viewseg button, .tabbar button,
+.book .cover, .sp .body, .qitem, .list .book{
+  transition:transform .08s ease-out, filter .08s ease-out, background-color .12s ease-out;
+}
+.btn:active:not(:disabled), .icon-btn:active, .chip:active, .result:active,
+.seg button:active, .viewseg button:active{transform:scale(.96); filter:brightness(.93)}
+.grid .book:active .cover, .sp:active .body{transform:scale(.95)}
+.list .book:active, .qitem:active{background:var(--surface-2)}
+.tabbar button:active{background:color-mix(in srgb, var(--accent) 16%, transparent)}
+/* Keyboard / switch-access focus. Fields keep their own ring (below). */
+:focus-visible{outline:2.5px solid var(--accent-ink); outline-offset:2px}
+input:focus-visible, select:focus-visible, textarea:focus-visible{outline:none}
 
 input[type=text],input[type=search],input[type=number],input[type=url],
 input[type=password],input[type=date],select,textarea{
@@ -265,12 +304,14 @@ input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:foc
   caret-color:var(--text);
 }
 input:focus,select:focus,textarea:focus{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
+[aria-invalid="true"]{border-color:var(--danger) !important}
+.ferr{color:var(--danger); font-size:13px; font-weight:650; margin:6px 0 0}
 label.field{display:block; margin-bottom:12px}
-label.field > span{display:block; font-size:12.5px; font-weight:650; color:var(--muted); margin-bottom:5px; letter-spacing:.01em}
+label.field > span{display:block; font-size:13px; font-weight:650; color:var(--muted); margin-bottom:5px; letter-spacing:.01em}
 .row{display:flex; gap:10px}
 .row > *{flex:1; min-width:0}
-.hint{font-size:12.5px; color:var(--muted); margin:6px 0 0}
-.flabel{display:block; font-size:12.5px; font-weight:650; color:var(--muted); margin-bottom:5px; letter-spacing:.01em}
+.hint{font-size:13px; color:var(--muted); margin:6px 0 0}
+.flabel{display:block; font-size:13px; font-weight:650; color:var(--muted); margin-bottom:5px; letter-spacing:.01em}
 .rowline{display:flex; gap:9px; align-items:center; font-size:14px; line-height:1.3}
 .rowline input[type=checkbox]{width:19px; height:19px; flex:none; accent-color:var(--accent)}
 
@@ -282,7 +323,7 @@ label.field > span{display:block; font-size:12.5px; font-weight:650; color:var(-
 .coveredit-busy{position:absolute; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.45)}
 
 .card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px; margin-bottom:12px}
-.card h3{font-size:15px; margin-bottom:10px}
+.card h3{font-family:var(--serif); font-weight:400; font-size:17px; margin-bottom:10px}
 .card p{margin:0 0 10px; font-size:14px; color:var(--muted)}
 .card p:last-child{margin-bottom:0}
 
@@ -296,11 +337,11 @@ label.field > span{display:block; font-size:12.5px; font-weight:650; color:var(-
    used to push the row past the screen. They share the row and ellipsize. */
 .filters select{
   width:auto; min-width:0; flex:0 1 auto;
-  min-height:36px; height:36px; padding:0 21px 0 11px;
-  font-size:13px; font-weight:600; border-radius:18px; background-color:var(--surface-2);
+  min-height:42px; height:42px; padding:0 22px 0 12px;
+  font-size:13.5px; font-weight:600; border-radius:21px; background-color:var(--surface-2);
   text-overflow:ellipsis;
   appearance:none; -webkit-appearance:none;
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236a6a73' stroke-width='2.5' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>");
+  background-image:var(--chev);       /* themed: it used to be a stray grey */
   background-repeat:no-repeat; background-position:right 5px center; background-size:13px;
 }
 /* Sort and status have a fixed vocabulary, so they always show their label in
@@ -310,6 +351,16 @@ label.field > span{display:block; font-size:12.5px; font-weight:650; color:var(-
 #fCollection{flex:1 1 auto; min-width:64px; max-width:190px}
 .filters select[data-on="1"]{background-color:var(--accent-soft); color:var(--accent-ink)}
 
+/* Count + view switch, between the filters and the books. The count only
+   appears when a search or filter is hiding something. */
+.listbar{display:flex; align-items:center; gap:10px; margin:-2px 0 10px}
+.listbar .shown{flex:1; min-width:0; font-size:13.5px; color:var(--muted)}
+.listbar .shown b{color:var(--text)}
+.viewseg{display:flex; flex:none; background:var(--surface-2); border-radius:12px; padding:3px; gap:2px}
+.viewseg button{width:44px; height:38px; border:0; border-radius:9px; background:transparent; color:var(--muted); display:grid; place-items:center}
+.viewseg button svg{width:20px; height:20px}
+.viewseg button[aria-pressed="true"]{background:var(--surface); color:var(--text); box-shadow:0 1px 2px rgba(0,0,0,.14)}
+
 .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(102px,1fr)); gap:14px 11px}
 .grid .book{display:flex; flex-direction:column; gap:6px; background:none; border:0; padding:0; text-align:left; color:inherit}
 .cover{
@@ -318,20 +369,28 @@ label.field > span{display:block; font-size:12.5px; font-weight:650; color:var(-
   display:grid; place-items:center;
 }
 .cover img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block}
-.cover .ph{padding:8px; font-size:11px; line-height:1.25; font-weight:650; color:var(--muted); text-align:center; overflow:hidden; display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical}
+.cover .ph{padding:8px; font-size:12px; line-height:1.25; font-weight:650; color:var(--muted); text-align:center; overflow:hidden; display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical}
 .list .cover .ph, .qitem .cover .ph, .result .cover .ph{font-size:8px; padding:3px; -webkit-line-clamp:4}
-.grid .t{font-size:12.5px; font-weight:620; line-height:1.25; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
-.grid .a{font-size:11.5px; color:var(--muted); line-height:1.25; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.grid .t{font-family:var(--serif); font-weight:400; font-size:14px; line-height:1.22; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+.grid .a{font-size:13px; color:var(--muted); line-height:1.25; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 
 .list{display:flex; flex-direction:column; gap:1px; background:var(--border); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden}
 .list .book{display:flex; gap:11px; align-items:center; padding:9px 11px; background:var(--surface); border:0; width:100%; text-align:left; color:inherit; min-height:60px}
 .list .cover{width:38px; flex:none; border-radius:4px}
 .list .meta{min-width:0; flex:1}
-.list .t{font-size:14.5px; font-weight:620; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.list .a{font-size:12.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.list .t{font-family:var(--serif); font-weight:400; font-size:15.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.list .a{font-size:13px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 
 .dot{display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:5px; vertical-align:1px}
-.dot.read{background:var(--ok)} .dot.reading{background:var(--warn)} .dot.want{background:var(--muted)}
+.dot.read{background:var(--ok)} .dot.reading{background:var(--reading)} .dot.want{background:var(--muted)}
+/* Status says itself in shape and words, not colour alone: a badge on the
+   cover in grid (tick = read, open book = reading, nothing = want to read),
+   the word itself in list. */
+.cover .st{position:absolute; right:5px; bottom:5px; width:24px; height:24px; border-radius:50%;
+  display:grid; place-items:center; background:var(--surface); box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.cover .st svg{width:15px; height:15px}
+.cover .st.read{color:var(--ok)} .cover .st.reading{color:var(--reading)}
+.stword{font-weight:700} .stword.read{color:var(--ok)} .stword.reading{color:var(--reading)}
 
 /* ------------------------------------------------------------ shelf view */
 /* Spines are drawn, not photographed — there is no spine-image source, and
@@ -367,21 +426,25 @@ label.field > span{display:block; font-size:12.5px; font-weight:650; color:var(-
 .shelf .sp .band{width:74%; height:1.5px; background:currentColor; opacity:.5; flex:none}
 .shelf .sp .ttl{
   writing-mode:vertical-rl; text-orientation:mixed;
-  font-size:10.5px; font-weight:700; letter-spacing:.01em;
+  font-size:12px; font-weight:700; letter-spacing:.01em;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   flex:1; min-height:0; margin:5px 0; text-align:left;
 }
 .shelf .sp .au{
-  writing-mode:vertical-rl; font-size:8.5px; font-weight:600; opacity:.8;
+  writing-mode:vertical-rl; font-size:10.5px; font-weight:600; opacity:.8;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   max-height:48px; margin-bottom:3px;
 }
-.shelf .sp .pip{width:5px;height:5px;border-radius:50%;flex:none;margin-bottom:5px}
+/* in the spine's own ink, so it shows on any colour: filled = read, ring = reading */
+.shelf .sp .pip{width:6px;height:6px;border-radius:50%;flex:none;margin-bottom:5px}
+.shelf .sp .pip.read{background:currentColor}
+.shelf .sp .pip.reading{box-shadow:inset 0 0 0 1.5px currentColor}
 
 .empty{text-align:center; padding:48px 20px; color:var(--muted)}
 .empty svg{width:52px;height:52px;opacity:.35;margin-bottom:12px}
-.empty h2{font-size:17px; color:var(--text); margin-bottom:6px}
+.empty h2{font-family:var(--serif); font-weight:400; font-size:20px; color:var(--text); margin-bottom:6px}
 .empty p{font-size:14px; margin:0 0 18px}
+.empty .stack{display:flex; flex-direction:column; gap:9px; max-width:280px; margin:0 auto}
 
 /* --------------------------------------------------------------- scanner */
 .scanwrap{position:relative; flex:1 1 auto; min-height:150px; border-radius:var(--radius); overflow:hidden; background:#000; margin-bottom:12px}
@@ -411,7 +474,7 @@ label.field > span{display:block; font-size:12.5px; font-weight:650; color:var(-
 .shutter:active{transform:translateX(-50%) scale(.95)}
 .shutter[disabled]{opacity:.75}
 .seg{display:flex; background:var(--surface-2); border-radius:11px; padding:3px; gap:3px}
-.seg button{flex:1; min-height:38px; border:0; border-radius:8px; background:transparent; color:var(--muted); font-size:13.5px; font-weight:650}
+.seg button{flex:1; min-height:44px; border:0; border-radius:8px; background:transparent; color:var(--muted); font-size:13.5px; font-weight:650}
 .seg button[aria-pressed="true"]{background:var(--surface); color:var(--text); box-shadow:0 1px 2px rgba(0,0,0,.12)}
 
 .confirmcard{
@@ -421,21 +484,23 @@ label.field > span{display:block; font-size:12.5px; font-weight:650; color:var(-
 .confirmcard .cover{width:52px; flex:none}
 .confirmcard .meta{flex:1; min-width:0}
 .confirmcard .t{font-size:14.5px; font-weight:650; line-height:1.3}
-.confirmcard .a{font-size:12.5px; color:var(--muted); margin-top:2px}
+.confirmcard .a{font-size:13px; color:var(--muted); margin-top:2px}
 .confirmcard .acts{display:flex; gap:8px; margin-top:9px}
+/* one-handed at the shelf: these are the most-tapped buttons in the app */
+.confirmcard .acts .btn{min-height:44px}
 /* Rapid mode is one-handed: Accept takes the width, Skip stays out of the way. */
-.confirmcard .acts.accept #rcAccept{flex:1; min-height:42px; font-size:15px}
-.confirmcard .acts.accept #rcSkip{flex:none; min-height:42px}
+.confirmcard .acts.accept #rcAccept{flex:1; min-height:46px; font-size:15px}
+.confirmcard .acts.accept #rcSkip{flex:none; min-height:46px}
 
 /* ----------------------------------------------------------- review queue */
-.qitem{display:flex; gap:11px; padding:11px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:9px; align-items:flex-start}
+.qitem{display:flex; gap:11px; padding:11px; cursor:pointer; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:9px; align-items:flex-start}
 .qitem.off{opacity:.5}
 .qitem .cover{width:44px; flex:none}
 .qitem .meta{flex:1; min-width:0}
 .qitem .t{font-size:14.5px; font-weight:620; line-height:1.3}
-.qitem .a{font-size:12.5px; color:var(--muted)}
-.qitem input[type=checkbox]{width:22px;height:22px;flex:none;margin-top:2px;accent-color:var(--accent)}
-.tag{display:inline-block; font-size:11px; font-weight:700; padding:2px 7px; border-radius:11px; background:var(--surface-2); color:var(--muted); margin-top:5px; margin-right:5px}
+.qitem .a{font-size:13px; color:var(--muted)}
+.qitem input[type=checkbox]{width:24px;height:24px;flex:none;margin-top:2px;accent-color:var(--accent)}
+.tag{display:inline-block; font-size:12px; font-weight:700; padding:2px 7px; border-radius:11px; background:var(--surface-2); color:var(--muted); margin-top:5px; margin-right:5px}
 .tag.dup{background:var(--warn-soft); color:var(--warn)}
 .tag.bad{background:var(--danger-soft); color:var(--danger)}
 .sticky-actions{
@@ -444,6 +509,8 @@ label.field > span{display:block; font-size:12.5px; font-weight:650; color:var(-
   -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
   padding:10px 0 2px; margin-top:6px; border-top:1px solid var(--border);
 }
+.sticky-actions .rsum{margin:0 0 8px; font-size:13px}
+.sticky-actions .ropts{margin-bottom:10px}
 
 /* ---------------------------------------------------------------- sheets */
 .backdrop{
@@ -456,19 +523,50 @@ label.field > span{display:block; font-size:12.5px; font-weight:650; color:var(-
   width:100%; max-width:560px; max-height:92vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
   background:var(--bg); border-radius:18px 18px 0 0; box-shadow:var(--shadow);
   transform:translateY(14px); transition:transform .16s ease;
-  padding-bottom:calc(16px + var(--safe-b));
 }
+.sheet:focus, .sheet:focus-visible{outline:none}
+.policy h2{font-family:var(--serif); font-weight:400; font-size:17px; margin:18px 0 6px}
+.policy h2:first-child{margin-top:0}
+.policy p{font-size:14.5px; margin:0 0 10px}
+.policy .muted{color:var(--muted); font-size:13px}
+.policy hr{border:0; border-top:1px solid var(--border); margin:18px 0}
 .backdrop.open .sheet{transform:none}
 .sheet-head{
   position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:10px;
   padding:12px 14px; background:var(--bg); border-bottom:1px solid var(--border);
 }
-.sheet-head h2{flex:1; font-size:17px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.sheet-body{padding:14px}
+.sheet-head h2{flex:1; font-family:var(--serif); font-weight:400; font-size:19px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.sheet-body{padding:14px 14px calc(16px + var(--safe-b))}
+.sheet-body:has(> .sheet-foot){padding-bottom:0}
+/* The primary action of a long sheet, always on screen — the editor's Save
+   used to sit ~350px below the fold on a phone. */
+.sheet-foot{
+  position:sticky; bottom:0; z-index:2;
+  margin:16px -14px 0; padding:12px 14px calc(12px + var(--safe-b));
+  background:var(--bg); border-top:1px solid var(--border);
+}
+details.more{margin:2px 0 14px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface)}
+details.more > summary{min-height:48px; padding:6px 12px; display:flex; align-items:center; gap:10px; cursor:pointer; list-style:none}
+details.more > summary::-webkit-details-marker{display:none}
+details.more > summary .lbl{font-weight:650; font-size:14.5px}
+details.more > summary .sub{display:block; font-size:12.5px; color:var(--muted); font-weight:500}
+details.more > summary svg{width:18px; height:18px; margin-left:auto; flex:none; color:var(--muted); transition:transform .15s ease}
+details.more[open] > summary svg{transform:rotate(180deg)}
+details.more[open] > summary{border-bottom:1px solid var(--border)}
+details.more .inner{padding:12px 12px 0}
+details.more .inner label.field > input, details.more .inner label.field > select{background:var(--bg)}
+.detail-del{display:flex; justify-content:center; margin-top:20px; padding-top:12px; border-top:1px solid var(--border)}
+
+/* Small blocking question that sits ABOVE a sheet ("Discard changes?"), so
+   answering "keep editing" leaves the sheet and everything in it untouched. */
+.alert{position:fixed; inset:0; z-index:90; display:grid; place-items:center; padding:24px; background:rgba(0,0,0,.5)}
+.alert .box{width:100%; max-width:340px; background:var(--surface); border-radius:16px; padding:18px; box-shadow:var(--shadow)}
+.alert h2{font-family:var(--serif); font-weight:400; font-size:19px; margin-bottom:6px}
+.alert p{margin:0 0 16px; color:var(--muted); font-size:14.5px}
 
 .detail-top{display:flex; gap:14px; margin-bottom:16px}
 .detail-top .cover{width:108px; flex:none; border-radius:10px}
-.detail-top h2{font-size:19px; line-height:1.25; margin-bottom:5px}
+.detail-top h2{font-family:var(--serif); font-weight:400; font-size:22px; line-height:1.2; margin-bottom:6px}
 .detail-top .by{color:var(--muted); font-size:14px}
 dl.facts{margin:0; display:grid; grid-template-columns:auto 1fr; gap:7px 14px; font-size:14px}
 dl.facts dt{color:var(--muted); font-weight:600}
@@ -476,7 +574,7 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
 
 .chips{display:flex; flex-wrap:wrap; gap:7px}
 .chip{
-  min-height:36px; padding:0 12px; border-radius:18px; font-size:13.5px; font-weight:620;
+  min-height:40px; padding:0 13px; position:relative; border-radius:18px; font-size:13.5px; font-weight:620;
   border:1px solid var(--border); background:var(--surface); color:var(--text);
   display:inline-flex; align-items:center; gap:6px;
 }
@@ -485,11 +583,12 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
 .result{display:flex; gap:11px; padding:10px; width:100%; text-align:left; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:8px; color:inherit; align-items:center}
 .result .cover{width:40px; flex:none}
 .result .t{font-size:14.5px; font-weight:620; line-height:1.3}
-.result .a{font-size:12.5px; color:var(--muted)}
+.result .a{font-size:13px; color:var(--muted)}
 
 .meter{height:8px; border-radius:4px; background:var(--surface-2); overflow:hidden; margin:8px 0 6px}
 .meter i{display:block; height:100%; background:var(--accent)}
 .meter.hot i{background:var(--danger)}
+.about{text-align:center; font-size:13px; color:var(--muted); margin:6px 0 4px}
 
 /* ---------------------------------------------------------------- toasts */
 #toasts{position:fixed; left:12px; right:12px; bottom:calc(84px + var(--safe-b)); z-index:80; display:flex; flex-direction:column; gap:8px; align-items:center; pointer-events:none}
@@ -517,9 +616,6 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
 <!-- ============================================================== chrome -->
 <header class="topbar">
   <h1 id="topTitle">Library <span class="count" id="bookCount"></span></h1>
-  <button class="icon-btn plain" id="btnViewMode" aria-label="Toggle grid or list view">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-  </button>
   <button class="icon-btn" id="btnAdd" aria-label="Add a book by hand">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
   </button>
@@ -529,7 +625,7 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
   <!-- ---------------------------------------------------------- library -->
   <section class="view active" id="view-library">
     <div class="searchrow">
-      <input type="search" id="q" placeholder="Search title, author, series, ISBN…" autocomplete="off" enterkeyhint="search">
+      <input type="search" id="q" aria-label="Search your library" placeholder="Search title, author, series, ISBN…" autocomplete="off" enterkeyhint="search">
     </div>
     <div class="filters">
       <select id="fSort" aria-label="Sort by">
@@ -547,6 +643,16 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
         <option value="reading">Reading</option>
         <option value="read">Read</option>
       </select>
+    </div>
+    <!-- Shows all three views with the current one marked. It used to be one
+         button that showed the NEXT view, so you cycled blind. -->
+    <div class="listbar" id="listBar">
+      <span class="shown" id="shownText" aria-live="polite"></span>
+      <div class="viewseg" role="group" aria-label="Library view">
+        <button data-v="grid" aria-pressed="true" aria-label="Grid view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
+        <button data-v="list" aria-pressed="false" aria-label="List view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <button data-v="shelf" aria-pressed="false" aria-label="Shelf view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 20h16" stroke-linecap="round"/><rect x="5" y="7" width="3.4" height="10"/><rect x="10" y="5" width="3.4" height="12"/><rect x="15.4" y="8" width="3.4" height="9"/></svg></button>
+      </div>
     </div>
     <div id="libraryBody"></div>
   </section>
@@ -586,27 +692,19 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
 
   <!-- ---------------------------------------------------------- settings -->
   <section class="view" id="view-settings">
-    <div class="card">
-      <h3>Collections</h3>
-      <div class="chips" id="collChips" style="margin-bottom:11px"></div>
-      <div class="row">
-        <input type="text" id="newColl" placeholder="New collection" autocomplete="off">
-        <button class="btn" id="btnAddColl" style="flex:none">Add</button>
-      </div>
-      <p class="hint">Tap a collection to rename or delete it.</p>
-    </div>
-
+    <!-- Backups first: they are the cards that protect the library. -->
     <div class="card">
       <h3>Backup</h3>
-      <p>Export is the only recovery path in this version. <b>JSON keeps your
-      photographed covers; CSV does not.</b> Export often.</p>
-      <div class="row" style="margin-bottom:9px">
-        <button class="btn primary" id="btnExportJson">Export JSON</button>
-        <button class="btn" id="btnExportCsv">Export CSV</button>
+      <p>Save your own copy of the library as a file, and keep it somewhere
+      safe. The server backup below does this for you automatically.</p>
+      <button class="btn primary wide" id="btnExportJson" style="margin-bottom:9px">Back up everything</button>
+      <div class="row">
+        <button class="btn" id="btnExportCsv">Export spreadsheet</button>
+        <button class="btn" id="btnImportCsv" style="flex:none">Import…</button>
       </div>
-      <button class="btn wide" id="btnImportCsv">Import a backup…</button>
       <input type="file" id="fileCsv" accept=".json,.csv,application/json,text/csv" class="hide">
-      <p class="hint">Takes either a GoughRead JSON backup or a CSV.</p>
+      <p class="hint">A backup keeps your photographed covers; the spreadsheet (CSV)
+      does not. Import takes either.</p>
     </div>
 
     <div class="card">
@@ -628,8 +726,18 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
     </div>
 
     <div class="card">
+      <h3>Collections</h3>
+      <div class="chips" id="collChips" style="margin-bottom:11px"></div>
+      <div class="row">
+        <input type="text" id="newColl" aria-label="New collection name" placeholder="New collection" autocomplete="off">
+        <button class="btn" id="btnAddColl" style="flex:none">Add</button>
+      </div>
+      <p class="hint">Tap a collection to rename or delete it.</p>
+    </div>
+
+    <div class="card">
       <h3>Storage</h3>
-      <div class="meter" id="storageMeter"><i style="width:0%"></i></div>
+      <div class="meter hide" id="storageMeter"><i style="width:0%"></i></div>
       <p id="storageText">—</p>
       <p class="hint" id="photoText">—</p>
     </div>
@@ -651,31 +759,40 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
       <button class="btn danger wide" id="btnClearAll">Delete everything</button>
     </div>
 
-    <p class="hint" style="text-align:center">GoughRead · data lives only on this device</p>
+    <p class="about">GoughRead <span id="appVersion"></span></p>
   </section>
 </main>
 
-<nav class="tabbar" role="tablist">
-  <button data-view="library" aria-selected="true" role="tab">
+<!-- Plain navigation, not a tablist: the screens are not tab panels, and
+     announcing them as tabs promised arrow-key behaviour that was not there. -->
+<nav class="tabbar" aria-label="Main">
+  <button data-view="library" aria-current="page">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M4 4.5A1.5 1.5 0 015.5 3H9v18H5.5A1.5 1.5 0 014 19.5z"/><path d="M9 3h4.5A1.5 1.5 0 0115 4.5v15a1.5 1.5 0 01-1.5 1.5H9z"/><path d="M16.4 4.2l2.6-.6a1 1 0 011.2.8l3 14.2a1 1 0 01-.8 1.2l-2.6.6"/></svg>
     Library
   </button>
-  <button data-view="scan" role="tab" aria-selected="false">
+  <button data-view="scan">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M3 8V5.5A1.5 1.5 0 014.5 4H7M17 4h2.5A1.5 1.5 0 0121 5.5V8M21 16v2.5a1.5 1.5 0 01-1.5 1.5H17M7 20H4.5A1.5 1.5 0 013 18.5V16"/><path d="M7 8v8M10 8v8M13.5 8v8M17 8v8" stroke-width="1.6"/></svg>
     Scan
   </button>
-  <button data-view="review" role="tab" aria-selected="false">
+  <button data-view="review">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 12h10M4 18h7"/><path d="M15.5 17.5l2 2 4-4.5"/></svg>
     Review<span class="badge hide" id="queueBadge">0</span>
   </button>
-  <button data-view="settings" role="tab" aria-selected="false">
+  <button data-view="settings">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 14.5a1.6 1.6 0 00.33 1.77l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.6 1.6 0 00-1.77-.33 1.6 1.6 0 00-1 1.47V21a2 2 0 11-4 0v-.1A1.6 1.6 0 008.1 19.4a1.6 1.6 0 00-1.77.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.6 1.6 0 00.33-1.77 1.6 1.6 0 00-1.47-1H2a2 2 0 110-4h.1a1.6 1.6 0 001.47-1.1 1.6 1.6 0 00-.33-1.77l-.06-.06a2 2 0 112.83-2.83l.06.06a1.6 1.6 0 001.77.33H8.1a1.6 1.6 0 001-1.47V3a2 2 0 114 0v.1a1.6 1.6 0 001 1.47 1.6 1.6 0 001.77-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.6 1.6 0 00-.33 1.77v.1a1.6 1.6 0 001.47 1H22a2 2 0 110 4h-.1a1.6 1.6 0 00-1.47 1z"/></svg>
     Settings
   </button>
 </nav>
 
-<div class="backdrop" id="backdrop"><div class="sheet" id="sheet"></div></div>
-<div id="toasts"></div>
+<div class="backdrop" id="backdrop"><div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" tabindex="-1"></div></div>
+<div class="alert hide" id="alert" role="alertdialog" aria-modal="true" aria-labelledby="alertTitle" aria-describedby="alertBody">
+  <div class="box"><h2 id="alertTitle"></h2><p id="alertBody"></p>
+    <div class="row"><button class="btn" id="alertNo"></button><button class="btn danger" id="alertYes"></button></div></div>
+</div>
+<datalist id="shelfList"></datalist>
+<!-- polite: a screen reader hears "Added." without being yanked away from
+     what it was reading -->
+<div id="toasts" role="status" aria-live="polite"></div>
 
 <script>
 "use strict";
@@ -752,7 +869,12 @@ const DEFAULT_SETTINGS = {
      localStorage entry, so neither is in here: what is left is only the stuff
      that can be thrown away and rebuilt by pressing Test connection. */
   backupUser:'', backupAuto:false,
-  backupLastAt:'', backupLastMsg:'', deviceId:''
+  backupLastAt:'', backupLastMsg:'', deviceId:'',
+  // the full splash plays once; after that it is a short fade
+  splashSeen:false,
+  // set once the camera has started for real, so the Scan tab can open it
+  // straight away instead of asking for a tap every time
+  cameraOk:false
 };
 // theme:'light' above, not 'auto' — the app is built around the sunflower now,
 // and a phone in dark mode should not be the thing that decides otherwise.
@@ -1280,14 +1402,68 @@ function ensureCollection(name){
    act, and it is a picture of the actual copy on the actual shelf. Its src
    cannot be set inline because reading the Blob is async, so it is marked and
    filled in by hydratePhotos once the sheet or list is in the document. */
-function coverHtml(b, cls){
+function coverHtml(b, cls, extra){
   const pid = str(b.coverPhotoId);
   const img = pid ? '<img alt="" data-photo="' + esc(pid) + '">'
             : b.coverUrl ? '<img loading="lazy" alt="" src="' + esc(b.coverUrl) + '">'
             : '';
   return '<div class="cover' + (cls ? ' ' + cls : '') + '">' +
-         '<span class="ph">' + esc(b.title) + '</span>' + img +
+         '<span class="ph">' + esc(b.title) + '</span>' + img + (extra || '') +
          '</div>';
+}
+
+/* ---- read status, said in words and shapes as well as colour ---- */
+const STATUS_WORD = { want:'Want to read', reading:'Reading', read:'Read' };
+const STATUS_ICON = {
+  read:'<path d="M5 12.5l4.2 4.2L19 7" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  reading:'<path d="M3.5 6.5C6 5.6 9 5.8 12 7.4c3-1.6 6-1.8 8.5-.9v11c-2.5-.9-5.5-.7-8.5.9-3-1.6-6-1.8-8.5-.9z" stroke-width="2" stroke-linejoin="round"/><path d="M12 7.4v11" stroke-width="2"/>'
+};
+/** The cover badge (grid). "Want to read" is the default state, so it gets none. */
+function statusBadge(b){
+  const ic = STATUS_ICON[b.readStatus];
+  return ic ? '<span class="st ' + b.readStatus + '" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor">' + ic + '</svg></span>' : '';
+}
+/** One segmented control, used in the detail sheet and the editor. */
+function statusSeg(id, cur){
+  return '<div class="seg" role="group" aria-label="Read status" id="' + id + '">' +
+    ['want','reading','read'].map(v => '<button type="button" data-v="' + v + '" aria-pressed="' +
+      (cur === v ? 'true' : 'false') + '">' + STATUS_WORD[v] + '</button>').join('') + '</div>';
+}
+function wireSeg(el, onPick){
+  $$('button', el).forEach(btn => btn.onclick = () => {
+    $$('button', el).forEach(x => x.setAttribute('aria-pressed', x === btn ? 'true' : 'false'));
+    if(onPick) onPick(btn.dataset.v);
+  });
+}
+const segValue = el => { const on = $('button[aria-pressed="true"]', el); return on ? on.dataset.v : 'want'; };
+
+/* ---- inline field errors: next to the field, not in a toast at the bottom ---- */
+function fieldError(input, msg){
+  clearFieldError(input);
+  const id = (input.id || 'f' + Math.random().toString(36).slice(2)) + 'Err';
+  const p = document.createElement('p');
+  p.className = 'ferr'; p.id = id; p.setAttribute('role', 'alert'); p.textContent = msg;
+  // below the field — or below its whole row, never squeezed in beside it
+  let anchor = input.closest('label.field, .field') || input;
+  if(anchor.parentElement && anchor.parentElement.classList.contains('row')) anchor = anchor.parentElement;
+  anchor.insertAdjacentElement('afterend', p);
+  input.setAttribute('aria-invalid', 'true');
+  input.setAttribute('aria-describedby', id);
+  input.addEventListener('input', () => clearFieldError(input), { once:true });
+  input.focus();
+}
+function clearFieldError(input){
+  const id = input.getAttribute('aria-describedby');
+  if(id){ const e = document.getElementById(id); if(e && e.classList.contains('ferr')) e.remove(); }
+  input.removeAttribute('aria-invalid'); input.removeAttribute('aria-describedby');
+}
+
+/** Every shelf name already in use, offered as suggestions so "Living room"
+ *  and "Livingroom" do not quietly become two shelves. */
+function refreshShelfList(){
+  const names = [...new Set(books.map(b => str(b.shelf).trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
+  $('#shelfList').innerHTML = names.map(n => '<option value="' + esc(n) + '">').join('');
 }
 /** Resolve every <img data-photo> in `root` against the photo store. */
 function hydratePhotos(root){
@@ -1326,11 +1502,11 @@ function spineHtml(b){
   const w = Math.round(Math.min(50, Math.max(23, 23 + pages / 26)));
   const ht = 132 + ((h >>> 8) % 5) * 9;
   const surname = (b.authors[0] || '').trim().split(/\s+/).pop() || '';
-  return '<button class="sp" data-id="' + esc(b.id) + '" title="' + esc(b.title + ' — ' + byline(b)) + '"' +
+  const label = b.title + ' — ' + byline(b) + ', ' + STATUS_WORD[b.readStatus];
+  return '<button class="sp" data-id="' + esc(b.id) + '" title="' + esc(label) + '" aria-label="' + esc(label) + '"' +
     ' style="--w:' + w + 'px;--h:' + ht + 'px;--c:' + c + ';--fg:' + fg + '">' +
     '<span class="body">' +
-      '<span class="pip" style="background:var(--' +
-        (b.readStatus === 'read' ? 'ok' : b.readStatus === 'reading' ? 'warn' : 'muted') + ')"></span>' +
+      '<span class="pip ' + b.readStatus + '"></span>' +
       '<span class="band"></span>' +
       '<span class="ttl">' + esc(b.title) + '</span>' +
       (surname ? '<span class="au">' + esc(surname) + '</span>' : '') +
@@ -1380,54 +1556,65 @@ function renderLibrary(){
   $('#bookCount').textContent = books.length
     ? books.length + (books.length === 1 ? ' book' : ' books') : '';
 
+  $('#listBar').classList.toggle('hide', !books.length);
   if(!books.length){
+    // First run is also where someone arrives with a backup from the web
+    // version, so importing is offered right here, not three screens away.
     body.innerHTML =
       '<div class="empty">' +
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M4 4.5A1.5 1.5 0 015.5 3H9v18H5.5A1.5 1.5 0 014 19.5z"/><path d="M9 3h4.5A1.5 1.5 0 0115 4.5v15a1.5 1.5 0 01-1.5 1.5H9z"/><path d="M16.4 4.2l2.6-.6a1 1 0 011.2.8l3 14.2a1 1 0 01-.8 1.2l-2.6.6"/></svg>' +
-      '<h2>No books yet</h2><p>Scan a barcode, or add one by hand.</p>' +
-      '<button class="btn primary" id="emptyScan">Start scanning</button></div>';
-    $('#emptyScan').onclick = () => showView('scan');
+      '<h2>No books yet</h2><p>Scan a barcode to start, or bring in a library you already have.</p>' +
+      '<div class="stack">' +
+        '<button class="btn primary" id="emptyScan">Start scanning</button>' +
+        '<button class="btn" id="emptyImport">Import a backup</button>' +
+        '<button class="btn ghost" id="emptyAdd">Add a book by hand</button>' +
+      '</div></div>';
+    $('#emptyScan').onclick = () => { primeAudio(); showView('scan'); };
+    $('#emptyImport').onclick = () => $('#fileCsv').click();
+    $('#emptyAdd').onclick = () => openManualAdd();
     return;
   }
   const list = visibleBooks();
+  const filtered = list.length !== books.length;
+  $('#shownText').innerHTML = filtered
+    ? '<b>' + list.length + '</b> of ' + books.length + ' shown · <button class="linkbtn" id="clearFilters2">Clear</button>'
+    : '';
+  if(filtered) $('#clearFilters2').onclick = clearFilters;
   if(!list.length){
     body.innerHTML = '<div class="empty"><h2>Nothing matches</h2><p>Try a different search or clear the filters.</p>' +
                      '<button class="btn" id="clearFilters">Clear filters</button></div>';
-    $('#clearFilters').onclick = () => {
-      $('#q').value = ''; $('#fCollection').value = ''; $('#fStatus').value = '';
-      syncFilterStyles(); renderLibrary();
-    };
+    $('#clearFilters').onclick = clearFilters;
     return;
   }
   const mode = settings.view === 'list' || settings.view === 'shelf' ? settings.view : 'grid';
   const html = mode === 'shelf'
     ? list.map(spineHtml).join('')
-    : list.map(b =>
-        '<button class="book" data-id="' + esc(b.id) + '">' +
-          coverHtml(b) +
-          '<div class="meta">' +
-            '<div class="t"><span class="dot ' + b.readStatus + '"></span>' + esc(b.title) + '</div>' +
-            '<div class="a">' + esc(byline(b)) + '</div>' +
+    : list.map(b => {
+        // list says the status in words; grid puts a badge on the cover
+        const word = (mode === 'list' && b.readStatus !== 'want')
+          ? '<span class="stword ' + b.readStatus + '">' + STATUS_WORD[b.readStatus] + '</span> · ' : '';
+        return '<button class="book" data-id="' + esc(b.id) + '" aria-label="' +
+            esc(b.title + ', ' + byline(b) + ', ' + STATUS_WORD[b.readStatus]) + '">' +
+          coverHtml(b, '', mode === 'grid' ? statusBadge(b) : '') +
+          '<div class="meta" aria-hidden="true">' +
+            '<div class="t">' + esc(b.title) + '</div>' +
+            '<div class="a">' + word + esc(byline(b)) + '</div>' +
           '</div>' +
-        '</button>').join('');
-  body.innerHTML = '<div class="' + mode + '">' + html + '</div>' +
-                   '<p class="hint" style="text-align:center;margin-top:14px">' +
-                   list.length + ' of ' + books.length + ' shown</p>';
+        '</button>';
+      }).join('');
+  body.innerHTML = '<div class="' + mode + '">' + html + '</div>';
   hydratePhotos(body);
   $$('.book, .sp', body).forEach(el => el.onclick = () => openDetail(el.dataset.id));
 }
 
-/** The toggle shows the view you will get next, not the one you are in. */
+function clearFilters(){
+  $('#q').value = ''; $('#fCollection').value = ''; $('#fStatus').value = '';
+  syncFilterStyles(); renderLibrary();
+}
+/** Marks the current view in the grid / list / shelf switch. */
 function applyViewIcon(){
-  const next = { grid:'list', list:'shelf', shelf:'grid' }[settings.view] || 'list';
-  const art = {
-    grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
-    list:'<path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round"/>',
-    shelf:'<path d="M4 20h16" stroke-linecap="round"/><rect x="5" y="7" width="3.4" height="10"/><rect x="10" y="5" width="3.4" height="12"/><rect x="15.4" y="8" width="3.4" height="9"/>'
-  }[next];
-  const btn = $('#btnViewMode');
-  btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">' + art + '</svg>';
-  btn.setAttribute('aria-label', 'Switch to ' + next + ' view');
+  const cur = settings.view === 'list' || settings.view === 'shelf' ? settings.view : 'grid';
+  $$('.viewseg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === cur ? 'true' : 'false'));
 }
 
 function renderCollectionFilter(){
@@ -1442,32 +1629,102 @@ function syncFilterStyles(){
 }
 
 /* ------------------------------------------------------------- sheets -- */
+/* The sheet is a modal dialog: focus goes into it, Tab stays inside it, the
+   page behind is inert, and focus returns to whatever opened it.
+
+   Two ways to close it. closeSheet() is for code that has finished with it —
+   a save, a confirm. requestCloseSheet() is for the user dismissing it (the X,
+   a tap outside, Escape, Android's back button), and it asks the sheet's
+   guard first, so a half-edited book is never thrown away by one stray tap. */
 let sheetCloser = null;
+let sheetGuard = null;
+let sheetReturnFocus = null;
+const BEHIND = () => [$('.topbar'), $('main'), $('.tabbar')];
 function openSheet(title, bodyHtml, opts){
   opts = opts || {};
   const sheet = $('#sheet');
+  const wasOpen = $('#backdrop').classList.contains('open');
+  // a sheet replacing a sheet keeps the ORIGINAL opener to return focus to
+  if(!wasOpen) sheetReturnFocus = document.activeElement;
   sheet.innerHTML =
     '<div class="sheet-head">' +
-      '<h2>' + esc(title) + '</h2>' +
+      '<h2 id="sheetTitle">' + esc(title) + '</h2>' +
       '<button class="icon-btn plain" id="sheetClose" aria-label="Close">' +
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>' +
     '</div>' +
     '<div class="sheet-body">' + bodyHtml + '</div>';
   $('#backdrop').classList.add('open');
+  BEHIND().forEach(el => el && (el.inert = true));
   sheet.scrollTop = 0;
   hydratePhotos(sheet);
-  $('#sheetClose').onclick = () => closeSheet();
+  $('#sheetClose').onclick = () => requestCloseSheet();
   sheetCloser = opts.onClose || null;
+  sheetGuard = opts.guard || null;
+  // focus the sheet itself, not its first field: that would pop the keyboard
+  // up over the content on every open
+  sheet.focus({ preventScroll:true });
   return sheet;
 }
 function closeSheet(){
   $('#backdrop').classList.remove('open');
+  BEHIND().forEach(el => el && (el.inert = false));
+  sheetGuard = null;
   const fn = sheetCloser; sheetCloser = null;
   if(fn) fn();
-  setTimeout(() => { if(!$('#backdrop').classList.contains('open')) $('#sheet').innerHTML = ''; }, 200);
+  setTimeout(() => {
+    if($('#backdrop').classList.contains('open')) return;
+    $('#sheet').innerHTML = '';
+    const back = sheetReturnFocus; sheetReturnFocus = null;
+    if(back && document.contains(back) && back.focus) back.focus({ preventScroll:true });
+  }, 200);
 }
-$('#backdrop').addEventListener('click', e => { if(e.target.id === 'backdrop') closeSheet(); });
-document.addEventListener('keydown', e => { if(e.key === 'Escape' && $('#backdrop').classList.contains('open')) closeSheet(); });
+async function requestCloseSheet(){
+  if(!$('#backdrop').classList.contains('open')) return;
+  if(sheetGuard && sheetGuard()){
+    const discard = await askAlert({ title:'Discard changes?',
+      body:'What you changed in this book has not been saved.',
+      yes:'Discard', no:'Keep editing' });
+    if(!discard) return;
+  }
+  closeSheet();
+}
+$('#backdrop').addEventListener('click', e => { if(e.target.id === 'backdrop') requestCloseSheet(); });
+document.addEventListener('keydown', e => {
+  if(!$('#alert').classList.contains('hide')){ if(e.key === 'Escape') $('#alertNo').click(); else trapTab(e, $('#alert')); return; }
+  if(!$('#backdrop').classList.contains('open')) return;
+  if(e.key === 'Escape') requestCloseSheet();
+  else trapTab(e, $('#sheet'));
+});
+function trapTab(e, root){
+  if(e.key !== 'Tab') return;
+  const f = $$('button, input, select, textarea, a[href], summary, [tabindex]:not([tabindex="-1"])', root)
+    .filter(el => !el.disabled && el.offsetParent !== null);
+  if(!f.length) return;
+  const first = f[0], last = f[f.length - 1];
+  if(e.shiftKey && (document.activeElement === first || document.activeElement === root)){ e.preventDefault(); last.focus(); }
+  else if(!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+}
+/** A two-button question that sits ABOVE the sheet, so "no" leaves it intact. */
+function askAlert(o){
+  return new Promise(resolve => {
+    const box = $('#alert'), prev = document.activeElement;
+    $('#alertTitle').textContent = o.title;
+    $('#alertBody').textContent = o.body;
+    $('#alertYes').textContent = o.yes;
+    $('#alertNo').textContent = o.no;
+    box.classList.remove('hide');
+    const done = v => {
+      box.classList.add('hide');
+      $('#alertYes').onclick = $('#alertNo').onclick = box.onclick = null;
+      if(prev && prev.focus) prev.focus({ preventScroll:true });
+      resolve(v);
+    };
+    $('#alertYes').onclick = () => done(true);
+    $('#alertNo').onclick  = () => done(false);
+    box.onclick = e => { if(e.target === box) done(false); };
+    $('#alertNo').focus();
+  });
+}
 
 /** Promise-based confirm. `requireText` forces the user to type a word. */
 function confirmDialog(o){
@@ -1498,28 +1755,37 @@ function openDetail(id){
   const b = books.find(x => x.id === id);
   if(!b) return;
   const fact = (k, v) => v ? '<dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd>' : '';
-  const statusWord = { want:'Want to read', reading:'Reading', read:'Read' }[b.readStatus];
   openSheet('Book',
     '<div class="detail-top">' + coverHtml(b) +
       '<div><h2>' + esc(b.title) + '</h2><div class="by">' + esc(byline(b)) + '</div></div></div>' +
-    '<dl class="facts">' +
-      fact('Status', statusWord) +
+    // the most common change there is — one tap, saved at once, no editor
+    statusSeg('dStatus', b.readStatus) +
+    '<dl class="facts" style="margin-top:16px">' +
       fact('Finished', b.readStatus === 'read' ? fmtDay(b.dateFinished) : '') +
       fact('Series', b.series ? (b.series + (b.seriesVolume !== null ? ' #' + b.seriesVolume : '')) : '') +
+      fact('Shelf', b.shelf) +
+      fact('Collections', b.collections.join(', ')) +
       fact('Publisher', b.publisher) +
       fact('Published', b.publishedYear) +
       fact('Pages', b.pageCount) +
-      fact('Shelf', b.shelf) +
-      fact('Collections', b.collections.join(', ')) +
       fact('ISBN-13', b.isbn13) +
       fact('ISBN-10', b.isbn10) +
       fact('Added', new Date(b.dateAdded).toLocaleDateString()) +
       fact('Source', b.source) +
     '</dl>' +
-    '<div class="row" style="margin-top:18px">' +
-      '<button class="btn primary" id="dEdit">Edit</button>' +
-      '<button class="btn danger" id="dDel">Delete</button></div>');
-  $('#dEdit').onclick = () => openEditor(b);
+    '<button class="btn primary wide" id="dEdit" style="margin-top:18px">Edit details</button>' +
+    // set apart and quieter than Edit, so it is never the button you hit by mistake
+    '<div class="detail-del"><button class="btn ghost dangertext sm" id="dDel">Delete this book</button></div>');
+  wireSeg($('#dStatus'), v => {
+    const nb = updateBook(b.id, { readStatus:v });
+    renderLibrary();
+    // redraw so the Finished line appears (or goes) straight away
+    openDetail(b.id);
+    toast(v === 'read' && nb && nb.dateFinished
+      ? 'Marked as read · finished ' + fmtDay(nb.dateFinished) + '.'
+      : 'Marked as ' + STATUS_WORD[v].toLowerCase() + '.', 'ok', 2200);
+  });
+  $('#dEdit').onclick = () => openEditor(books.find(x => x.id === id) || b);
   $('#dDel').onclick = async () => {
     sheetCloser = null;
     const ok = await confirmDialog({
@@ -1538,23 +1804,19 @@ function openEditor(book){
     '<button type="button" class="chip" data-coll="' + esc(c) + '" aria-pressed="' +
     (b.collections.includes(c) ? 'true' : 'false') + '">' + esc(c) + '</button>').join('');
 
+  refreshShelfList();          // suggestions for the Shelf field
   openSheet(isNew ? 'Add a book' : 'Edit book',
     '<label class="field"><span>Title</span><input type="text" id="eTitle" value="' + esc(b.title === 'Untitled' && isNew ? '' : b.title) + '"></label>' +
     '<label class="field"><span>Authors (comma separated)</span><input type="text" id="eAuthors" value="' + esc(b.authors.join(', ')) + '"></label>' +
-    '<div class="row"><label class="field" style="flex:2"><span>Series</span><input type="text" id="eSeries" value="' + esc(b.series) + '"></label>' +
-    '<label class="field"><span>Volume</span><input type="number" inputmode="numeric" id="eVol" value="' + (b.seriesVolume === null ? '' : b.seriesVolume) + '"></label></div>' +
-    '<div class="row"><label class="field" style="flex:2"><span>Publisher</span><input type="text" id="ePub" value="' + esc(b.publisher) + '"></label>' +
-    '<label class="field"><span>Year</span><input type="number" inputmode="numeric" id="eYear" value="' + (b.publishedYear === null ? '' : b.publishedYear) + '"></label></div>' +
-    '<div class="row"><label class="field"><span>ISBN-13</span><input type="text" inputmode="numeric" id="eIsbn" value="' + esc(b.isbn13) + '"></label>' +
-    '<label class="field"><span>Pages</span><input type="number" inputmode="numeric" id="ePages" value="' + (b.pageCount === null ? '' : b.pageCount) + '"></label></div>' +
-    '<label class="field"><span>Shelf</span><input type="text" id="eShelf" placeholder="Living room — top shelf" value="' + esc(b.shelf) + '"></label>' +
-    '<label class="field"><span>Read status</span><select id="eStatus">' +
-      ['want','reading','read'].map(v => '<option value="' + v + '"' + (b.readStatus === v ? ' selected' : '') + '>' +
-        ({want:'Want to read',reading:'Reading',read:'Read'})[v] + '</option>').join('') +
-    '</select></label>' +
+    '<div class="field"><span class="flabel">Read status</span>' + statusSeg('eStatus', b.readStatus) + '</div>' +
     // only meaningful once a book is Read; blank is allowed (date unknown)
     '<label class="field' + (b.readStatus === 'read' ? '' : ' hide') + '" id="eFinishedRow"><span>Finished reading</span>' +
       '<input type="date" id="eFinished" max="' + today() + '" value="' + esc(b.dateFinished) + '"></label>' +
+    '<label class="field"><span>Shelf</span><input type="text" id="eShelf" list="shelfList" autocomplete="off" placeholder="Living room — top shelf" value="' + esc(b.shelf) + '"></label>' +
+    '<div class="field"><span class="flabel">Collections</span>' +
+      '<div class="chips" id="eColls">' + (collBoxes || '<span class="hint">None yet — add one below.</span>') + '</div>' +
+      '<div class="row" style="margin-top:9px"><input type="text" id="eNewColl" aria-label="New collection name" placeholder="New collection">' +
+      '<button class="btn sm" id="eAddColl" style="flex:none">Add</button></div></div>' +
     '<div class="field"><span class="flabel">Cover</span>' +
       '<div class="coveredit">' +
         '<div class="cover" id="eCoverPrev">' +
@@ -1575,30 +1837,48 @@ function openEditor(book){
       '<input type="file" id="ePhotoCamF" accept="image/*" capture="environment" class="hide">' +
       '<input type="file" id="ePhotoPickF" accept="image/*" class="hide">' +
     '</div>' +
-    '<label class="field"><span>Cover image URL</span><input type="url" id="eCover" value="' + esc(b.coverUrl) + '"></label>' +
-    '<div class="field"><span class="flabel">Collections</span>' +
-      '<div class="chips" id="eColls">' + (collBoxes || '<span class="hint">None yet — add some in Settings.</span>') + '</div>' +
-      '<div class="row" style="margin-top:9px"><input type="text" id="eNewColl" placeholder="New collection">' +
-      '<button class="btn sm" id="eAddColl" style="flex:none">Add</button></div></div>' +
-    '<button class="btn primary wide" id="eSave" style="margin-top:8px">' + (isNew ? 'Add to library' : 'Save changes') + '</button>');
+    '<details class="more" id="eMore"><summary><span><span class="lbl">More details</span>' +
+      '<span class="sub">Series, publisher, year, pages, ISBN, cover link</span></span>' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>' +
+      '<div class="inner">' +
+        '<div class="row"><label class="field" style="flex:2"><span>Series</span><input type="text" id="eSeries" value="' + esc(b.series) + '"></label>' +
+        '<label class="field"><span>Volume</span><input type="number" inputmode="numeric" id="eVol" value="' + (b.seriesVolume === null ? '' : b.seriesVolume) + '"></label></div>' +
+        '<div class="row"><label class="field" style="flex:2"><span>Publisher</span><input type="text" id="ePub" value="' + esc(b.publisher) + '"></label>' +
+        '<label class="field"><span>Year</span><input type="number" inputmode="numeric" id="eYear" value="' + (b.publishedYear === null ? '' : b.publishedYear) + '"></label></div>' +
+        '<div class="row"><label class="field"><span>ISBN-13</span><input type="text" inputmode="numeric" id="eIsbn" value="' + esc(b.isbn13) + '"></label>' +
+        '<label class="field"><span>Pages</span><input type="number" inputmode="numeric" id="ePages" value="' + (b.pageCount === null ? '' : b.pageCount) + '"></label></div>' +
+        '<label class="field"><span>Cover image link</span><input type="url" id="eCover" value="' + esc(b.coverUrl) + '"></label>' +
+      '</div></details>' +
+    '<div class="sheet-foot"><button class="btn primary wide" id="eSave">' + (isNew ? 'Add to library' : 'Save changes') + '</button></div>',
+    { guard: () => dirty || (isNew && $('#eTitle').value.trim() !== '') });
 
-  // choosing Read offers today's date; the field stays editable, and can be
-  // cleared if the date is unknown
-  $('#eStatus').onchange = e => {
-    const v = e.target.value;
+  /* Anything typed, ticked or photographed makes the sheet "dirty", and a
+     dismissal then asks first. Programmatic prefill does not fire input
+     events, which is why a new book counts any title as unsaved work. */
+  let dirty = false;
+  const sheetEl = $('#sheet');
+  sheetEl.addEventListener('input', () => { dirty = true; });
+  sheetEl.addEventListener('change', () => { dirty = true; });
+  wireSeg($('#eStatus'), v => {
+    dirty = true;
     $('#eFinishedRow').classList.toggle('hide', v !== 'read');
+    // switching to Read offers today, the same as the book card does; the
+    // field stays editable and can be cleared if the date is unknown
     if(v === 'read' && b.readStatus !== 'read' && !$('#eFinished').value) $('#eFinished').value = today();
-  };
+  });
+
 
   const wire = () => $$('#eColls .chip').forEach(ch =>
-    ch.onclick = () => ch.setAttribute('aria-pressed', ch.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'));
+    ch.onclick = () => { dirty = true; ch.setAttribute('aria-pressed', ch.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'); });
   wire();
   $('#eAddColl').onclick = () => {
     const n = $('#eNewColl').value.trim();
     if(!n) return;
+    dirty = true;
     ensureCollection(n);
     renderCollectionFilter();
     const box = $('#eColls');
+    const none = $('.hint', box); if(none) none.remove();
     // matched on the dataset, not a built selector — a name may contain quotes
     if(!$$('.chip', box).some(ch => ch.dataset.coll === n)){
       box.insertAdjacentHTML('beforeend',
@@ -1634,6 +1914,7 @@ function openEditor(book){
       pending.spine = shot.spine;
       pending.dropped = false;
       pending.previewUrl = URL.createObjectURL(shot.blob);
+      dirty = true;
       setPreview(pending.previewUrl);
       dropBtn.classList.remove('hide');
       note.textContent = Math.round(shot.blob.size / 1024) + ' KB · saved when you save the book.';
@@ -1657,6 +1938,7 @@ function openEditor(book){
     if(pending.previewUrl){ URL.revokeObjectURL(pending.previewUrl); pending.previewUrl = ''; }
     pending.blob = null; pending.spine = '';
     pending.dropped = true;
+    dirty = true;
     dropBtn.classList.add('hide');
     const url = $('#eCover').value.trim();
     setPreview(url);
@@ -1665,12 +1947,16 @@ function openEditor(book){
 
   $('#eSave').onclick = async () => {
     const title = $('#eTitle').value.trim();
-    if(!title){ toast('A title is required.', 'err'); $('#eTitle').focus(); return; }
+    if(!title){ fieldError($('#eTitle'), 'A title is required.'); return; }
     const isbnRaw = $('#eIsbn').value.trim();
     let isbn13 = '', isbn10 = '';
     if(isbnRaw){
       const n = normaliseIsbn(isbnRaw);
-      if(!n){ toast('That ISBN does not check out. Leave it blank if unsure.', 'err', 5000); return; }
+      if(!n){
+        $('#eMore').open = true;
+        fieldError($('#eIsbn'), 'That ISBN does not check out — check the digits, or leave it blank.');
+        return;
+      }
       isbn13 = n.isbn13; isbn10 = n.isbn10;
     }
     const patch = {
@@ -1682,7 +1968,7 @@ function openEditor(book){
       publishedYear: $('#eYear').value,
       pageCount: $('#ePages').value,
       shelf: $('#eShelf').value.trim(),
-      readStatus: $('#eStatus').value,
+      readStatus: segValue($('#eStatus')),
       // always passed, even blank, so updateBook never stamps over a choice
       dateFinished: $('#eFinished').value,
       coverUrl: $('#eCover').value.trim(),
@@ -1690,7 +1976,7 @@ function openEditor(book){
     };
     if(isNew){
       const dupe = findByIsbn(isbn13);
-      if(dupe){ toast('You already have “' + dupe.title + '”.', 'err', 5000); return; }
+      if(dupe){ $('#eMore').open = true; fieldError($('#eIsbn'), 'You already have “' + dupe.title + '” with this ISBN.'); return; }
     }
 
     /* The photo is committed before the book record, so a record can never end
@@ -1729,6 +2015,7 @@ function openEditor(book){
       photoDel(stale).catch(err => console.warn('stale photo delete failed', err));
     }
     if(pending.previewUrl) URL.revokeObjectURL(pending.previewUrl);
+    dirty = false;
     closeSheet();
     renderCollectionFilter(); renderLibrary(); renderSettings();
   };
@@ -1738,7 +2025,7 @@ function openEditor(book){
 function openManualAdd(){
   openSheet('Add a book',
     '<div class="card"><h3>By ISBN</h3>' +
-      '<div class="row"><input type="text" id="mIsbn" inputmode="numeric" placeholder="9780441013593" autocomplete="off">' +
+      '<div class="row"><input type="text" id="mIsbn" inputmode="numeric" aria-label="ISBN" placeholder="9780441013593" autocomplete="off">' +
       '<button class="btn primary" id="mIsbnGo" style="flex:none">Look up</button></div></div>' +
     '<div class="card"><h3>By title or author</h3>' +
       '<label class="field"><span>Title</span><input type="text" id="mTitle" autocomplete="off"></label>' +
@@ -1750,9 +2037,9 @@ function openManualAdd(){
   $('#mByHand').onclick = () => openEditor(null);
   $('#mIsbnGo').onclick = async () => {
     const n = normaliseIsbn($('#mIsbn').value);
-    if(!n){ toast('That is not a valid ISBN-10 or ISBN-13.', 'err', 4500); return; }
+    if(!n){ fieldError($('#mIsbn'), 'That is not a valid ISBN-10 or ISBN-13.'); return; }
     const dupe = findByIsbn(n.isbn13);
-    if(dupe){ toast('You already have “' + dupe.title + '”.', 'err', 5000); return; }
+    if(dupe){ fieldError($('#mIsbn'), 'You already have “' + dupe.title + '”.'); return; }
     const busy = busyToast('Looking up ' + n.isbn13 + '…');
     try{
       const found = await lookupIsbn(n.isbn13);
@@ -1769,7 +2056,7 @@ function openManualAdd(){
   };
   $('#mSearchGo').onclick = async () => {
     const t = $('#mTitle').value.trim(), a = $('#mAuthor').value.trim();
-    if(!t && !a){ toast('Enter a title or an author.', 'err'); return; }
+    if(!t && !a){ fieldError($('#mTitle'), 'Enter a title or an author.'); return; }
     const box = $('#mResults');
     box.innerHTML = '<p class="hint">Searching…</p>';
     try{
@@ -1973,6 +2260,7 @@ async function startScan(){
     }
 
     scan.track = scan.stream ? scan.stream.getVideoTracks()[0] : null;
+    if(!settings.cameraOk){ settings.cameraOk = true; saveSettings(); }
     setupTorch();
     scan.startedAt = Date.now();
     applyScanMode();          // starts the loop only in rapid mode
@@ -1983,6 +2271,7 @@ async function startScan(){
     $('#btnScanToggle').textContent = 'Start camera';
     const name = err && err.name;
     if(name === 'NotAllowedError' || name === 'SecurityError'){
+      if(settings.cameraOk){ settings.cameraOk = false; saveSettings(); }
       setScanStatus('Camera permission denied.');
       toast('Camera permission was refused. Allow it in your browser settings, or type the ISBN.', 'err', 7000);
     }else if(name === 'NotFoundError' || name === 'OverconstrainedError'){
@@ -2071,7 +2360,7 @@ async function shoot(){
     onCode(found);
   }else{
     setScanStatus('No barcode found — fill the box, add light, try again.');
-    if(navigator.vibrate) try{ navigator.vibrate([18,55,18]); }catch(err){}
+    haptic('miss');
   }
 }
 async function nativeTick(){
@@ -2122,7 +2411,12 @@ function beep(){
     o.connect(g); g.connect(ctx.destination);
     o.start(); o.stop(ctx.currentTime + 0.15);
   }catch(err){ /* audio is a nicety */ }
-  if(navigator.vibrate) try{ navigator.vibrate(35); }catch(err){}
+  haptic('hit');
+}
+/* A WebView ignores navigator.vibrate without the VIBRATE permission, so in
+   the app this goes through the Haptics plugin, which brings its own. */
+function haptic(kind){
+  if(navigator.vibrate) try{ navigator.vibrate(kind === 'miss' ? [18,55,18] : 35); }catch(err){}
 }
 
 function onCode(raw){
@@ -2327,6 +2621,7 @@ function refreshQueueBadge(){
 }
 
 /* --------------------------------------------------------- review queue */
+const reviewApply = { coll:'', st:'want', shelf:'', open:false };
 function renderReview(){
   const body = $('#reviewBody');
   if(!queue.length){
@@ -2343,7 +2638,8 @@ function renderReview(){
       q.state === 'dup'     ? '<span class="tag dup">' + esc(q.note) + '</span>' :
       q.state === 'missing' ? '<span class="tag bad">' + esc(q.note) + '</span>' :
       q.state === 'error'   ? '<span class="tag bad">' + esc(q.note) + '</span>' : '';
-    return '<div class="qitem' + (q.selected ? '' : ' off') + '" data-id="' + esc(q.tmpId) + '">' +
+    // a <label>, so the whole row toggles the box, not just the 24px square
+    return '<label class="qitem' + (q.selected ? '' : ' off') + '" data-id="' + esc(q.tmpId) + '">' +
       '<input type="checkbox" ' + (q.selected ? 'checked' : '') + ' aria-label="Include this book">' +
       coverHtml(b) +
       '<div class="meta"><div class="t">' + esc(b.title) + '</div>' +
@@ -2351,26 +2647,54 @@ function renderReview(){
       '<span class="tag">' + esc(q.isbn13) + '</span></div>' +
       '<button class="icon-btn plain" data-drop="1" aria-label="Discard">' +
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>' +
-      '</div>';
+      '</label>';
   }).join('');
 
-  const collOpts = collections.map(c => '<option value="' + esc(c) + '">' + esc(c) + '</option>').join('');
+  /* The options used to sit open in a sticky panel that took 40% of a phone
+     screen, leaving room for about three books. Now one summary line and one
+     row of buttons; the options open on demand. Their values live in
+     reviewApply, so a lookup finishing mid-choice (which re-renders this
+     view) no longer resets them. */
+  const ra = reviewApply;
+  if(ra.coll && !collections.includes(ra.coll)) ra.coll = '';
+  refreshShelfList();
+  const collOpts = collections.map(c => '<option value="' + esc(c) + '"' + (c === ra.coll ? ' selected' : '') + '>' + esc(c) + '</option>').join('');
+  const stOpts = ['want','reading','read'].map(v => '<option value="' + v + '"' + (v === ra.st ? ' selected' : '') + '>' + STATUS_WORD[v] + '</option>').join('');
   body.innerHTML = items +
     '<div class="sticky-actions">' +
-      '<div class="card" style="margin-bottom:8px">' +
-        '<h3>Apply to everything selected</h3>' +
+      '<div class="card ropts' + (ra.open ? '' : ' hide') + '" id="rOpts">' +
+        '<h3>Apply to the books you add</h3>' +
         '<div class="row" style="margin-bottom:10px">' +
-          '<select id="rColl"><option value="">No collection</option>' + collOpts + '</select>' +
-          '<select id="rStatus"><option value="want">Want to read</option><option value="reading">Reading</option><option value="read">Read</option></select>' +
+          '<select id="rColl" aria-label="Collection"><option value="">No collection</option>' + collOpts + '</select>' +
+          '<select id="rStatus" aria-label="Read status">' + stOpts + '</select>' +
         '</div>' +
-        '<input type="text" id="rShelf" placeholder="Shelf (optional)" autocomplete="off">' +
+        '<input type="text" id="rShelf" list="shelfList" aria-label="Shelf" placeholder="Shelf (optional)" autocomplete="off" value="' + esc(ra.shelf) + '">' +
+        '<div class="row" style="margin-top:10px">' +
+          '<button class="btn" id="rDropDupes">Discard duplicates</button>' +
+          '<button class="btn ghost dangertext" id="rClear">Discard all</button>' +
+        '</div>' +
       '</div>' +
+      '<p class="hint rsum" id="rSum"></p>' +
       '<div class="row">' +
-        '<button class="btn" id="rDropDupes">Discard duplicates</button>' +
+        '<button class="btn" id="rMore" style="flex:none" aria-expanded="' + (ra.open ? 'true' : 'false') + '" aria-controls="rOpts">' + (ra.open ? 'Done' : 'Options') + '</button>' +
         '<button class="btn primary" id="rCommit">Add selected</button>' +
       '</div>' +
-      '<button class="btn ghost wide" id="rClear" style="margin-top:6px;color:var(--danger)">Discard the whole queue</button>' +
     '</div>';
+
+  const summarise = () => {
+    $('#rSum').textContent = 'Adding as ' + STATUS_WORD[ra.st].toLowerCase() +
+      ' · ' + (ra.coll ? ra.coll : 'no collection') + (ra.shelf ? ' · ' + ra.shelf : '');
+  };
+  summarise();
+  $('#rColl').onchange   = e => { ra.coll = e.target.value; summarise(); };
+  $('#rStatus').onchange = e => { ra.st = e.target.value; summarise(); };
+  $('#rShelf').oninput   = e => { ra.shelf = e.target.value; summarise(); };
+  $('#rMore').onclick = () => {
+    ra.open = !ra.open;
+    $('#rOpts').classList.toggle('hide', !ra.open);
+    $('#rMore').textContent = ra.open ? 'Done' : 'Options';
+    $('#rMore').setAttribute('aria-expanded', ra.open ? 'true' : 'false');
+  };
 
   $$('.qitem', body).forEach(el => {
     const q = queue.find(x => x.tmpId === el.dataset.id);
@@ -2379,7 +2703,8 @@ function renderReview(){
       el.classList.toggle('off', !q.selected);
       updateCommitLabel();
     };
-    $('[data-drop]', el).onclick = () => {
+    $('[data-drop]', el).onclick = e => {
+      e.preventDefault();           // inside the <label>: do not toggle the box too
       queue = queue.filter(x => x.tmpId !== q.tmpId);
       saveQueue(); refreshQueueBadge(); refreshTally(); renderReview();
     };
@@ -2400,7 +2725,7 @@ function renderReview(){
   };
   $('#rClear').onclick = async () => {
     const ok = await confirmDialog({ title:'Discard the queue?', body:queue.length + ' scanned books will be thrown away.', confirmLabel:'Discard', danger:true });
-    if(ok){ queue = []; saveQueue(); refreshQueueBadge(); refreshTally(); renderReview(); }
+    if(ok){ queue = []; ra.open = false; saveQueue(); refreshQueueBadge(); refreshTally(); renderReview(); }
   };
   $('#rCommit').onclick = () => {
     const coll = $('#rColl').value, st = $('#rStatus').value, shelf = $('#rShelf').value.trim();
@@ -2927,12 +3252,15 @@ function renderSettings(){
   const used = bytesUsed(), cap = 5 * 1024 * 1024;
   const pct = Math.min(100, Math.round(used / cap * 1000) / 10);
   const meter = $('#storageMeter');
+  // the meter only earns its place once space is actually getting short
+  meter.classList.toggle('hide', pct < 50 && !storageBroken);
   meter.classList.toggle('hot', pct > 80);
   $('i', meter).style.width = Math.max(1.5, pct) + '%';
   $('#storageText').textContent =
-    (used / 1024).toFixed(0) + ' KB of roughly 5 MB used (' + pct + '%) · ' +
-    books.length + ' book' + (books.length === 1 ? '' : 's') +
-    (storageBroken ? ' · WRITES ARE FAILING' : '');
+    books.length + ' book' + (books.length === 1 ? '' : 's') + ' · ' + fmtBytes(used) + ' of book data' +
+    (pct >= 50 ? ' — ' + pct + '% of the space for book records' : '') +
+    (storageBroken ? '. Saving is failing — back up now.' : '');
+  $('#storageText').style.color = (storageBroken || pct > 80) ? 'var(--danger)' : '';
   refreshPhotoStats();
   renderBackupCard();
 
@@ -2974,9 +3302,8 @@ async function refreshPhotoStats(){
     return;
   }
   el.textContent = count
-    ? count + ' photographed cover' + (count === 1 ? '' : 's') + ' · ' + fmtBytes(bytes) +
-      ', stored separately from the 5 MB above'
-    : 'No photographed covers yet — take one from a book’s Edit screen.';
+    ? count + ' photographed cover' + (count === 1 ? '' : 's') + ' · ' + fmtBytes(bytes)
+    : 'No photographed covers yet — add one from a book’s Edit details.';
 }
 const fmtBytes = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB'
                     : n >= 1024    ? Math.round(n / 1024) + ' KB'
@@ -2989,9 +3316,9 @@ function manageCollection(name){
     '<p class="hint">Deleting a collection removes the label from its books. The books stay.</p>');
   $('#cSave').onclick = () => {
     const n = $('#cName').value.trim();
-    if(!n){ toast('A name is required.', 'err'); return; }
+    if(!n){ fieldError($('#cName'), 'A name is required.'); return; }
     if(n === name){ closeSheet(); return; }
-    if(collections.includes(n)){ toast('There is already a collection called that.', 'err'); return; }
+    if(collections.includes(n)){ fieldError($('#cName'), 'There is already a collection called that.'); return; }
     collections = collections.map(c => c === name ? n : c);
     books.forEach(b => { b.collections = b.collections.map(c => c === name ? n : c); });
     saveCollections(); saveBooks();
@@ -3036,34 +3363,50 @@ function applyTheme(){
 }
 
 /* ================================================================= views */
+/* All four screens scroll inside the one <main>, so its position used to leak
+   between them: Settings opened wherever the library had been left. Library
+   keeps its own place; the others always open at the top. */
+let currentView = 'library';
+const viewScroll = {};
 function showView(name){
+  const m = $('main');
+  viewScroll[currentView] = m.scrollTop;
+  currentView = name;
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
-  $$('.tabbar button').forEach(b => b.setAttribute('aria-selected', b.dataset.view === name ? 'true' : 'false'));
+  $$('.tabbar button').forEach(b => {
+    if(b.dataset.view === name) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  });
   $('#topTitle').firstChild.nodeValue =
     ({ library:'Library ', scan:'Scan ', review:'Review ', settings:'Settings ' })[name];
   $('#bookCount').classList.toggle('hide', name !== 'library');
-  $('#btnViewMode').classList.toggle('hide', name !== 'library');
-  $('#btnAdd').classList.toggle('hide', name === 'settings');
+  // Scan has its own Type ISBN button, and Settings adds nothing
+  $('#btnAdd').classList.toggle('hide', name === 'settings' || name === 'scan');
 
   if(name !== 'scan' && scan.running) stopScan();
   if(name === 'library')  renderLibrary();
   if(name === 'review')   renderReview();
   if(name === 'settings') renderSettings();
   if(name === 'scan')     refreshTally();
-  window.scrollTo(0,0);
+  m.scrollTop = name === 'library' ? (viewScroll.library || 0) : 0;
+  // once the camera has worked, the Scan tab opens it: no extra tap
+  if(name === 'scan' && settings.cameraOk && !scan.running && !scan.pending) startScan();
 }
 
 /* ================================================================== wire */
 function wireUp(){
-  $$('.tabbar button').forEach(b => b.onclick = () => showView(b.dataset.view));
+  $$('.tabbar button').forEach(b => b.onclick = () => {
+    // the tap is the user gesture the beep needs, if the camera auto-starts
+    if(b.dataset.view === 'scan') primeAudio();
+    showView(b.dataset.view);
+  });
 
   $('#btnAdd').onclick = () => openManualAdd();
-  $('#btnViewMode').onclick = () => {
-    const order = ['grid', 'list', 'shelf'];
-    const i = order.indexOf(settings.view);
-    settings.view = order[(i < 0 ? 0 : i + 1) % order.length];
+  $$('.viewseg button').forEach(b => b.onclick = () => {
+    if(settings.view === b.dataset.v) return;
+    settings.view = b.dataset.v;
     saveSettings(); applyViewIcon(); renderLibrary();
-  };
+  });
 
   let qTimer = null;
   $('#q').addEventListener('input', () => { clearTimeout(qTimer); qTimer = setTimeout(renderLibrary, 140); });
@@ -3085,12 +3428,13 @@ function wireUp(){
   $('#btnTypeIsbn').onclick = () => {
     openSheet('Type an ISBN',
       '<label class="field"><span>ISBN-10 or ISBN-13</span>' +
-      '<input type="text" id="tIsbn" inputmode="numeric" autocomplete="off" placeholder="9780441013593"></label>' +
+      '<input type="text" id="tIsbn" inputmode="numeric" autocomplete="off" enterkeyhint="go" placeholder="9780441013593"></label>' +
       '<button class="btn primary wide" id="tGo">Look up</button>');
     $('#tIsbn').focus();
+    $('#tIsbn').addEventListener('keydown', e => { if(e.key === 'Enter') $('#tGo').click(); });
     $('#tGo').onclick = () => {
       const n = normaliseIsbn($('#tIsbn').value);
-      if(!n){ toast('That is not a valid ISBN.', 'err'); return; }
+      if(!n){ fieldError($('#tIsbn'), 'That is not a valid ISBN-10 or ISBN-13.'); return; }
       closeSheet();
       if(settings.scanMode === 'rapid') handleRapid(n.isbn13);
       else handleConfirm(n.isbn13);
@@ -3100,7 +3444,7 @@ function wireUp(){
   $('#btnAddColl').onclick = () => {
     const n = $('#newColl').value.trim();
     if(!n) return;
-    if(collections.includes(n)){ toast('That collection already exists.', 'err'); return; }
+    if(collections.includes(n)){ fieldError($('#newColl'), 'That collection already exists.'); return; }
     ensureCollection(n);
     $('#newColl').value = '';
     renderCollectionFilter(); renderSettings();
@@ -3109,12 +3453,12 @@ function wireUp(){
 
   $('#btnExportCsv').onclick = () => {
     if(!books.length){ toast('Nothing to export yet.', 'err'); return; }
-    exportCsv(); toast('CSV downloaded.', 'ok');
+    exportCsv(); toast('Spreadsheet downloaded.', 'ok');
   };
   $('#btnExportJson').onclick = async () => {
     if(!books.length){ toast('Nothing to export yet.', 'err'); return; }
     const r = await exportJson();
-    toast('JSON downloaded — ' + books.length + ' books' +
+    toast('Backup downloaded — ' + books.length + ' books' +
           (r.photos ? ', ' + r.photos + ' cover photo' + (r.photos === 1 ? '' : 's') : '') +
           ' · ' + fmtBytes(r.bytes) + '.', 'ok', 5000);
   };
@@ -3216,7 +3560,12 @@ function runSplash(){
   const el = $('#splash');
   if(!el) return;
   const slow = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const hold = slow ? 1100 : 2300;      // in + hold; the fade out runs after
+  /* The full sunflower plays once. After that it is a short fade: Android 12+
+     already shows its own launch screen first, and two splashes back to back
+     cost about 3.5 s on every cold start. */
+  const first = !settings.splashSeen;
+  const hold = first ? (slow ? 1100 : 2300) : 800;
+  if(first){ settings.splashSeen = true; saveSettings(); }
   let gone = false;
 
   const finish = () => {
@@ -3240,8 +3589,8 @@ function runSplash(){
 
 /* ------------------------------------------------------------ boot + sw */
 function boot(){
+  loadAll();          // first, so the splash knows whether it has been seen
   runSplash();
-  loadAll();
   applyTheme();
   $('#fSort').value = settings.sort;
   $('#modeConfirm').setAttribute('aria-pressed', settings.scanMode === 'confirm' ? 'true' : 'false');
@@ -3262,6 +3611,13 @@ function boot(){
 
   // Off the critical path: clear out any cover photo nothing points at.
   setTimeout(() => { sweepPhotos(); }, 2500);
+
+  // the real version, from the APK, when there is one
+  // which deploy this is: the service worker's cache name is the version
+  // that is bumped on every upload, so show that rather than a second number
+  fetch('./sw.js', { cache:'no-store' }).then(r => r.text())
+    .then(t => { const m = /CACHE = 'clib-(v\d+)'/.exec(t); if(m) $('#appVersion').textContent = m[1]; })
+    .catch(() => {});
 
   // A day without a backup is worth catching on open, since someone who only
   // opens the app to add a book would otherwise never trip the change timer.
