@@ -391,6 +391,18 @@ label.field > span{display:block; font-size:13px; font-weight:650; color:var(--m
 .cover .st svg{width:15px; height:15px}
 .cover .st.read{color:var(--ok)} .cover .st.reading{color:var(--reading)}
 .stword{font-weight:700} .stword.read{color:var(--ok)} .stword.reading{color:var(--reading)}
+.stword.lent{color:var(--warn)}
+/* A lent book says who has it across the top of its cover, clear of the
+   status badge in the bottom corner. */
+.cover .lent{position:absolute; left:0; right:0; top:0; padding:3px 6px; font-size:11px; font-weight:700;
+  line-height:1.35; text-align:center; background:var(--accent); color:var(--on-accent);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.loanbox{display:flex; align-items:center; gap:12px; margin-top:12px; padding:11px 12px;
+  border-radius:11px; background:var(--warn-soft)}
+.loanbox .who{flex:1; min-width:0}
+.loanbox .who b{display:block; font-weight:700; color:var(--text); overflow-wrap:anywhere}
+.loanbox .who span{font-size:13px; color:var(--warn)}
+.loanbox .btn{flex:none}
 
 /* ------------------------------------------------------------ shelf view */
 /* Spines are drawn, not photographed — there is no spine-image source, and
@@ -637,11 +649,12 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
       <select id="fCollection" aria-label="Filter by collection"></select>
       <!-- shorter than the "Want to read" used elsewhere, purely so the three
            filter pills fit one row on a 360px phone -->
-      <select id="fStatus" aria-label="Filter by read status">
+      <select id="fStatus" aria-label="Filter by read status or loan">
         <option value="">Any status</option>
         <option value="want">To read</option>
         <option value="reading">Reading</option>
         <option value="read">Read</option>
+        <option value="loan">On loan</option>
       </select>
     </div>
     <!-- Shows all three views with the current one marked. It used to be one
@@ -951,6 +964,13 @@ function normaliseBook(b){
     // Kept if the status later moves off Read, so a slip or a re-read never
     // throws the original date away. Older records simply normalise to ''.
     dateFinished: /^\d{4}-\d{2}-\d{2}$/.test(str(b.dateFinished)) ? str(b.dateFinished) : '',
+    // who has it now ('' = at home) and since when. Returned loans move into
+    // loanHistory, oldest first, so "who borrowed this last" is never lost.
+    loanTo: str(b.loanTo),
+    loanDate: str(b.loanTo) ? ymd(b.loanDate) : '',
+    loanHistory: arr(b.loanHistory)
+      .map(h => ({ to: str(h && h.to), from: ymd(h && h.from), back: ymd(h && h.back) }))
+      .filter(h => h.to),
     source: ['scan','ocr','manual'].includes(b.source) ? b.source : 'manual',
     dateAdded: str(b.dateAdded) || new Date().toISOString(),
     dateUpdated: str(b.dateUpdated) || str(b.dateAdded) || new Date().toISOString()
@@ -958,6 +978,7 @@ function normaliseBook(b){
 }
 const str = v => (v === null || v === undefined) ? '' : String(v).trim();
 const num = v => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : null; };
+const ymd = v => /^\d{4}-\d{2}-\d{2}$/.test(str(v)) ? str(v) : '';
 function uuid(){
   if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -1175,6 +1196,25 @@ function fmtDay(ymd){
   if(!m) return '';
   return new Date(+m[1], +m[2] - 1, +m[3])
     .toLocaleDateString(undefined, { day:'numeric', month:'short', year:'numeric' });
+}
+/** As fmtDay, but the year only when it is not this one: "Oct 3", "Dec 20, 2025". */
+function fmtDayShort(ymd){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd || '');
+  if(!m) return '';
+  const o = { day:'numeric', month:'short' };
+  if(+m[1] !== new Date().getFullYear()) o.year = 'numeric';
+  return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(undefined, o);
+}
+/** How long ago a YYYY-MM-DD day was, in words: "today", "4 days", "3 months". */
+function sinceDay(ymd){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd || '');
+  if(!m) return '';
+  const t = new Date(); t.setHours(0,0,0,0);
+  const n = Math.round((t - new Date(+m[1], +m[2] - 1, +m[3])) / 864e5);
+  if(n <= 0) return 'today';
+  if(n === 1) return '1 day';
+  if(n < 60) return n + ' days';
+  return Math.round(n / 30.44) + ' months';
 }
 
 /* -------------------------------------------------------------- ISBN --- */
@@ -1423,6 +1463,12 @@ function statusBadge(b){
   const ic = STATUS_ICON[b.readStatus];
   return ic ? '<span class="st ' + b.readStatus + '" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor">' + ic + '</svg></span>' : '';
 }
+/** The borrower's name across the top of the cover (grid), or nothing. */
+function loanRibbon(b){
+  return b.loanTo ? '<span class="lent" aria-hidden="true">' + esc(b.loanTo) + '</span>' : '';
+}
+/** ", lent to Sarah" for labels that are read aloud, or ''. */
+const loanWords = b => b.loanTo ? ', lent to ' + b.loanTo : '';
 /** One segmented control, used in the detail sheet and the editor. */
 function statusSeg(id, cur){
   return '<div class="seg" role="group" aria-label="Read status" id="' + id + '">' +
@@ -1502,7 +1548,7 @@ function spineHtml(b){
   const w = Math.round(Math.min(50, Math.max(23, 23 + pages / 26)));
   const ht = 132 + ((h >>> 8) % 5) * 9;
   const surname = (b.authors[0] || '').trim().split(/\s+/).pop() || '';
-  const label = b.title + ' — ' + byline(b) + ', ' + STATUS_WORD[b.readStatus];
+  const label = b.title + ' — ' + byline(b) + ', ' + STATUS_WORD[b.readStatus] + loanWords(b);
   return '<button class="sp" data-id="' + esc(b.id) + '" title="' + esc(label) + '" aria-label="' + esc(label) + '"' +
     ' style="--w:' + w + 'px;--h:' + ht + 'px;--c:' + c + ';--fg:' + fg + '">' +
     '<span class="body">' +
@@ -1539,15 +1585,20 @@ function visibleBooks(){
   const st = $('#fStatus').value;
   let out = books;
   if(coll)  out = out.filter(b => b.collections.includes(coll));
-  if(st)    out = out.filter(b => b.readStatus === st);
+  // "On loan" sits in the status filter but is not a read status
+  if(st === 'loan') out = out.filter(b => b.loanTo);
+  else if(st)       out = out.filter(b => b.readStatus === st);
   if(q){
     const terms = q.split(/\s+/);
     out = out.filter(b => {
       const hay = [b.title, b.authors.join(' '), b.series, b.publisher, b.shelf,
-                   b.isbn13, b.isbn10, b.collections.join(' ')].join(' ').toLowerCase();
+                   b.isbn13, b.isbn10, b.collections.join(' '), b.loanTo].join(' ').toLowerCase();
       return terms.every(t => hay.indexOf(t) !== -1);
     });
   }
+  // the list of what is out is a list of what to chase: longest gone first
+  if(st === 'loan') return out.slice().sort((x,y) =>
+    (x.loanDate || '9').localeCompare(y.loanDate || '9') || sortKeyTitle(x).localeCompare(sortKeyTitle(y)));
   return out.slice().sort(comparator(settings.sort));
 }
 
@@ -1590,12 +1641,15 @@ function renderLibrary(){
   const html = mode === 'shelf'
     ? list.map(spineHtml).join('')
     : list.map(b => {
-        // list says the status in words; grid puts a badge on the cover
-        const word = (mode === 'list' && b.readStatus !== 'want')
-          ? '<span class="stword ' + b.readStatus + '">' + STATUS_WORD[b.readStatus] + '</span> · ' : '';
+        // list says the status in words; grid puts a badge on the cover.
+        // A loan outranks the read status in the list: it is the thing to act on.
+        const word = mode !== 'list' ? ''
+          : b.loanTo ? '<span class="stword lent">Lent to ' + esc(b.loanTo) + '</span> · '
+          : b.readStatus !== 'want' ? '<span class="stword ' + b.readStatus + '">' + STATUS_WORD[b.readStatus] + '</span> · '
+          : '';
         return '<button class="book" data-id="' + esc(b.id) + '" aria-label="' +
-            esc(b.title + ', ' + byline(b) + ', ' + STATUS_WORD[b.readStatus]) + '">' +
-          coverHtml(b, '', mode === 'grid' ? statusBadge(b) : '') +
+            esc(b.title + ', ' + byline(b) + ', ' + STATUS_WORD[b.readStatus] + loanWords(b)) + '">' +
+          coverHtml(b, '', mode === 'grid' ? statusBadge(b) + loanRibbon(b) : '') +
           '<div class="meta" aria-hidden="true">' +
             '<div class="t">' + esc(b.title) + '</div>' +
             '<div class="a">' + word + esc(byline(b)) + '</div>' +
@@ -1760,8 +1814,16 @@ function openDetail(id){
       '<div><h2>' + esc(b.title) + '</h2><div class="by">' + esc(byline(b)) + '</div></div></div>' +
     // the most common change there is — one tap, saved at once, no editor
     statusSeg('dStatus', b.readStatus) +
+    (b.loanTo
+      ? '<div class="loanbox"><div class="who"><b>Lent to ' + esc(b.loanTo) + '</b>' +
+          (b.loanDate ? '<span>since ' + esc(fmtDayShort(b.loanDate)) + ' · ' + esc(sinceDay(b.loanDate)) + '</span>' : '') +
+        '</div><button class="btn sm primary" id="dReturn">Mark returned</button></div>'
+      : '<button class="btn wide" id="dLend" style="margin-top:12px">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg>' +
+          'Lend this book</button>') +
     '<dl class="facts" style="margin-top:16px">' +
       fact('Finished', b.readStatus === 'read' ? fmtDay(b.dateFinished) : '') +
+      lentBefore(b) +
       fact('Series', b.series ? (b.series + (b.seriesVolume !== null ? ' #' + b.seriesVolume : '')) : '') +
       fact('Shelf', b.shelf) +
       fact('Collections', b.collections.join(', ')) +
@@ -1785,6 +1847,19 @@ function openDetail(id){
       ? 'Marked as read · finished ' + fmtDay(nb.dateFinished) + '.'
       : 'Marked as ' + STATUS_WORD[v].toLowerCase() + '.', 'ok', 2200);
   });
+  if(b.loanTo){
+    $('#dReturn').onclick = () => {
+      const who = b.loanTo;
+      updateBook(b.id, { loanTo:'', loanDate:'',
+        loanHistory: b.loanHistory.concat([{ to:who, from:b.loanDate, back:today() }]) });
+      haptic();
+      renderLibrary();
+      openDetail(b.id);
+      toast('Returned by ' + who + '.', 'ok', 2200);
+    };
+  } else {
+    $('#dLend').onclick = () => openLend(b.id);
+  }
   $('#dEdit').onclick = () => openEditor(books.find(x => x.id === id) || b);
   $('#dDel').onclick = async () => {
     sheetCloser = null;
@@ -1794,6 +1869,62 @@ function openDetail(id){
     if(ok){ deleteBook(b.id); closeSheet(); renderLibrary(); toast('Deleted.'); }
     else openDetail(id);
   };
+}
+
+/* -------------------------------------------------------------- loans -- */
+/* A loan is a name and a day. Returned loans move into loanHistory, so the
+   sheet can say who had it before and the name field can offer them again. */
+function lentBefore(b){
+  const h = b.loanHistory;
+  if(!h.length) return '';
+  const recent = h.slice(-3).reverse().map(x => esc(x.to) +
+    (x.from || x.back ? ', ' + esc([fmtDayShort(x.from), fmtDayShort(x.back)].filter(Boolean).join(' – ')) : ''));
+  return '<dt>Lent before</dt><dd>' + recent.join('<br>') +
+    (h.length > 3 ? '<br><span class="hint">and ' + (h.length - 3) + ' more</span>' : '') + '</dd>';
+}
+/** Everyone who has borrowed anything, most recent first, one spelling each. */
+function borrowerNames(){
+  const seen = new Map();
+  books.forEach(b => {
+    const all = b.loanHistory.map(h => [h.to, h.back || h.from]);
+    if(b.loanTo) all.push([b.loanTo, b.loanDate || today()]);
+    all.forEach(([n, d]) => {
+      const k = n.toLowerCase(), cur = seen.get(k);
+      if(!cur || (d || '') > cur.d) seen.set(k, { n, d: d || '' });
+    });
+  });
+  return [...seen.values()].sort((x,y) => y.d.localeCompare(x.d)).map(x => x.n);
+}
+function openLend(id){
+  const b = books.find(x => x.id === id);
+  if(!b) return;
+  const names = borrowerNames();
+  openSheet('Lend this book',
+    '<p style="margin:0 0 14px;font-size:15px">“' + esc(b.title) + '”</p>' +
+    '<label class="field"><span>Who has it?</span>' +
+      '<input type="text" id="lName" list="borrowerList" autocomplete="off" autocapitalize="words" placeholder="Name"></label>' +
+    '<datalist id="borrowerList">' + names.map(n => '<option value="' + esc(n) + '">').join('') + '</datalist>' +
+    (names.length ? '<div class="chips" id="lRecent" style="margin:-4px 0 12px">' +
+      names.slice(0, 5).map(n => '<button type="button" class="chip" data-n="' + esc(n) + '">' + esc(n) + '</button>').join('') +
+      '</div>' : '') +
+    '<label class="field"><span>Lent on</span>' +
+      '<input type="date" id="lDate" max="' + today() + '" value="' + today() + '"></label>' +
+    '<div class="row"><button class="btn" id="lCancel">Cancel</button>' +
+    '<button class="btn primary" id="lSave">Lend</button></div>');
+  $$('#lRecent .chip').forEach(c => c.onclick = () => { $('#lName').value = c.dataset.n; clearFieldError($('#lName')); });
+  $('#lCancel').onclick = () => openDetail(b.id);
+  $('#lSave').onclick = () => {
+    const name = $('#lName').value.trim().replace(/\s+/g, ' ');
+    if(!name){ fieldError($('#lName'), 'Who are you lending it to?'); return; }
+    const d = $('#lDate').value;
+    if(d && d > today()){ fieldError($('#lDate'), 'That day has not happened yet.'); return; }
+    updateBook(b.id, { loanTo:name, loanDate: d || today() });
+    haptic();
+    renderLibrary();
+    openDetail(b.id);
+    toast('Lent to ' + name + '.', 'ok', 2200);
+  };
+  $('#lName').onkeydown = e => { if(e.key === 'Enter') $('#lSave').click(); };
 }
 
 /* -------------------------------------------------------- book editor -- */
@@ -2755,7 +2886,7 @@ function renderReview(){
    re-photographing. The JSON backup is the one that keeps the pictures. */
 const CSV_HEADER = ['id','isbn13','isbn10','title','authors','series','seriesVolume','publisher',
                     'publishedYear','pageCount','shelf','collections','readStatus','coverUrl',
-                    'coverPhoto','dateAdded','dateFinished'];
+                    'coverPhoto','dateAdded','dateFinished','loanTo','loanDate'];
 
 function csvCell(v){
   const s = (v === null || v === undefined) ? '' : String(v);
@@ -2770,7 +2901,7 @@ function booksToCsv(list){
       b.publishedYear === null ? '' : b.publishedYear,
       b.pageCount === null ? '' : b.pageCount,
       b.shelf, b.collections.join('|'), b.readStatus, b.coverUrl,
-      b.coverPhotoId ? 'yes' : '', b.dateAdded, b.dateFinished
+      b.coverPhotoId ? 'yes' : '', b.dateAdded, b.dateFinished, b.loanTo, b.loanDate
     ].map(csvCell).join(','));
   });
   return '﻿' + rows.join('\r\n') + '\r\n';
@@ -2922,6 +3053,8 @@ function rowsToBooks(rows){
       readStatus: get('readStatus').trim().toLowerCase(),
       coverUrl: get('coverUrl'), dateAdded: get('dateAdded'),
       dateFinished: get('dateFinished').trim(),   // absent in older exports: ''
+      // the current loan only; past loans travel in the JSON backup
+      loanTo: get('loanTo'), loanDate: get('loanDate').trim(),
       source: 'manual'
     }));
   }

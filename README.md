@@ -88,6 +88,24 @@ canvas, so it can be sampled, and the spine takes the cover's own dominant
 colour instead of a hashed one. Its ink flips between cream and near-black on
 whichever gives more contrast.
 
+## Loans
+
+A loan is a name and a day, nothing more.
+
+- **Lend.** Open a book and tap **Lend this book**. Enter who has it and the
+  day (it defaults to today; future days are refused). The name field offers
+  everyone who has borrowed before, with the five most recent as chips.
+- **Return.** A lent book's sheet shows "Lent to Sarah · since Oct 3 · 4 days"
+  and a **Mark returned** button. That moves the loan into `loanHistory`, and
+  the sheet then lists it under **Lent before** (the last three, with a count of
+  the rest).
+- **Find what's out.** The status filter has an **On loan** entry, sorted with
+  the longest-out book first whatever the sort pill says. Search matches the
+  borrower's name, so typing "sarah" finds everything she has.
+- **Library views.** In grid view the borrower's name runs across the top of the
+  cover. In list view, "Lent to Sarah" replaces the status word. Every view's
+  accessible label includes it.
+
 ## Photographed covers
 
 Any book's **Edit** screen has *Photograph it* (straight to the camera, via
@@ -435,6 +453,7 @@ Schema history:
 | v3 | light became the default theme. Migrates anyone still on `'auto'`, which was the old default rather than a choice. |
 | v4 | the backup key moved to `clib.backupKey` and the server URL into the code. Migrates an existing key out of the settings blob, and strips the stray `backupUrl`/`backupKey` properties on the way past. |
 | v4 (Oct 2026, no bump) | added `dateFinished` (`YYYY-MM-DD` or `''`) to the book record, plus a `dateFinished` CSV column. Nothing to migrate: older records and CSVs normalise to `''`. Choosing **Read** in the editor offers today's date; the field is editable and may be left blank. The date is kept if a book moves off Read. |
+| v4 (Oct 2026, no bump) | added loans: `loanTo` (name or `''`), `loanDate` (`YYYY-MM-DD`, cleared when nobody has it) and `loanHistory` (`[{to, from, back}]`, oldest first), plus `loanTo`/`loanDate` CSV columns. History travels in the JSON backup only. Nothing to migrate: older records normalise to an empty loan. |
 
 Changing a value in `DEFAULT_SETTINGS` alone never reaches an existing install
 — settings are persisted on first run, so the stored blob always wins. A
