@@ -28,7 +28,7 @@
    the brown the wordmark is lettered in becomes the text. So the app is the
    same picture the splash is — cream pages laid on an amber ground. */
 :root{
-  --splash-bg:#e6c25c;    /* the field colour, straight off the artwork */
+  --splash-bg:#cb9b55;    /* the painted splash's average colour (v19) */
   --bg:#ecca76;
   --surface:#fdf4dd;      /* the pages */
   --surface-2:#f4e4b5;
@@ -218,6 +218,25 @@ a{color:var(--accent-ink)}
 }
 .topbar h1{font-family:var(--serif); font-weight:400; font-size:22px; flex:1; min-width:0; display:flex; align-items:baseline; gap:8px}
 .topbar h1 .count{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; font-size:13px; font-weight:500; color:var(--muted)}
+/* Light/dark switch: a small pill with the sun at one end and the moon at the
+   other; the yellow knob sits under whichever is active. 28px tall to stay
+   quiet beside the + button, with an invisible hit area out to 44px. */
+.themeswitch{
+  position:relative; flex:none; width:52px; height:28px; padding:0 6px;
+  border-radius:999px; border:1px solid var(--border); background:var(--surface-2);
+  color:var(--muted); display:flex; align-items:center; justify-content:space-between;
+}
+.themeswitch::after{content:""; position:absolute; inset:-8px -4px}
+.themeswitch svg{width:14px; height:14px; position:relative; z-index:1; transition:color .22s}
+.ts-knob{
+  position:absolute; top:2px; left:2px; width:22px; height:22px; border-radius:50%;
+  background:var(--accent); box-shadow:0 1px 3px rgba(0,0,0,.25);
+  transition:transform .22s ease;
+}
+.themeswitch[aria-checked="true"] .ts-knob{transform:translateX(24px)}
+.themeswitch[aria-checked="false"] .ts-sun,
+.themeswitch[aria-checked="true"] .ts-moon{color:var(--on-accent)}
+@media (prefers-reduced-motion: reduce){ .ts-knob, .themeswitch svg{transition:none} }
 main{
   flex:1 1 auto; min-height:0;
   overflow-y:auto; overflow-x:hidden;
@@ -633,6 +652,11 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
 <!-- ============================================================== chrome -->
 <header class="topbar">
   <h1 id="topTitle">Library <span class="count" id="bookCount"></span></h1>
+  <button class="themeswitch" id="themeSwitch" role="switch" aria-checked="false" aria-label="Dark theme">
+    <svg class="ts-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>
+    <svg class="ts-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+    <span class="ts-knob"></span>
+  </button>
   <button class="icon-btn" id="btnAdd" aria-label="Add a book by hand">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
   </button>
@@ -758,17 +782,6 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
       <div class="meter hide" id="storageMeter"><i style="width:0%"></i></div>
       <p id="storageText">—</p>
       <p class="hint" id="photoText">—</p>
-    </div>
-
-    <div class="card">
-      <h3>Appearance</h3>
-      <label class="field"><span>Theme</span>
-        <select id="fTheme">
-          <option value="auto">Match device</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-        </select>
-      </label>
     </div>
 
     <div class="card">
@@ -3401,8 +3414,6 @@ function renderSettings(){
   $('#storageText').style.color = (storageBroken || pct > 80) ? 'var(--danger)' : '';
   refreshPhotoStats();
   renderBackupCard();
-
-  $('#fTheme').value = settings.theme;
 }
 function renderBackupCard(){
   const key = $('#bkKey'); if(!key) return;
@@ -3498,6 +3509,12 @@ function applyTheme(){
      --bg is only the fallback if a theme ever stops setting one. */
   const cs = getComputedStyle(document.body);
   tag.setAttribute('content', cs.getPropertyValue('--status').trim() || cs.backgroundColor);
+
+  $('#themeSwitch').setAttribute('aria-checked', effectiveTheme() === 'dark' ? 'true' : 'false');
+}
+function effectiveTheme(){
+  if(settings.theme !== 'auto') return settings.theme;
+  return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
 /* ================================================================= views */
@@ -3662,7 +3679,16 @@ function wireUp(){
     renderBackupCard();
   };
 
-  $('#fTheme').onchange = e => { settings.theme = e.target.value; saveSettings(); applyTheme(); };
+  /* The switch only knows light and dark. Anyone left on 'auto' (the old
+     "Match device" choice) keeps it until they tap, and the switch shows
+     whatever the device is currently giving them. */
+  $('#themeSwitch').onclick = () => {
+    settings.theme = effectiveTheme() === 'dark' ? 'light' : 'dark';
+    saveSettings(); applyTheme(); haptic();
+  };
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if(settings.theme === 'auto') applyTheme();
+  });
 
   $('#btnClearAll').onclick = async () => {
     const ok = await confirmDialog({

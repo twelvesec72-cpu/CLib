@@ -27,7 +27,7 @@ settings, photographed cover and spine colour all intact.
 | `sw.js` | Service worker. **Bump `CACHE` on every deploy.** |
 | `icon-192.png`, `icon-512.png` | App icons (`purpose: any`) |
 | `icon-maskable-512.png` | Maskable icon (`purpose: maskable`) |
-| `splash.webp` | The GoughRead artwork shown on a cold start (154 KB) |
+| `splash.webp` | The GoughRead artwork shown on a cold start (1116×2000, 404 KB; the painted version since v19) |
 | `goughread-bg-gold.webp` | The light theme's background painting (388 KB) |
 | `goughread-bg-night.webp` | The dark theme's background painting (231 KB) |
 | `young-serif.woff2` | The display serif for headings and book titles (27 KB, in `sw.js` SHELL so it works offline) |
@@ -145,7 +145,8 @@ have both behaviours from one element.
 
 ## Splash
 
-`splash.webp` — the GoughRead sunflower — shows on a cold start: the artwork
+`splash.webp` — the GoughRead sunflower, painted in impasto over the same gold
+swirl as the light background since v19 — shows on a cold start: the artwork
 fades in over about half a second, holds, and the whole layer fades out, gone
 from the DOM at ~2.9 s. Tapping skips it. `prefers-reduced-motion` gets the
 picture with no fades and a shorter hold.
@@ -182,6 +183,13 @@ added again. Nothing is lost by doing that — the library lives in the browser'
 storage for the origin, not in the installed shortcut.
 
 ## Theme
+
+**Switching:** since v19 there is a sun/moon switch in the top bar, next to +
+(`#themeSwitch`, `role="switch"`, checked = dark). It replaced the Theme
+dropdown in Settings, which is gone. The switch only knows light and dark.
+Anyone still on `theme:'auto'` (the old "Match device") keeps it until they
+tap. Until then, the switch shows what the device is giving them and follows
+OS changes.
 
 Van Gogh palettes: **Starry Night** (deep indigo, chrome yellow) for dark, and
 for light the **splash artwork itself, sampled**. The amber field it is painted
