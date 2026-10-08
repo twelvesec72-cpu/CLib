@@ -28,7 +28,8 @@ settings, photographed cover and spine colour all intact.
 | `icon-192.png`, `icon-512.png` | App icons (`purpose: any`) |
 | `icon-maskable-512.png` | Maskable icon (`purpose: maskable`) |
 | `splash.webp` | The GoughRead artwork shown on a cold start (154 KB) |
-| `goughread-bg-starry-g-village.svg` | The dark theme's night-sky background (19 KB) |
+| `goughread-bg-gold.webp` | The light theme's background painting (388 KB) |
+| `goughread-bg-night.webp` | The dark theme's background painting (231 KB) |
 | `young-serif.woff2` | The display serif for headings and book titles (27 KB, in `sw.js` SHELL so it works offline) |
 | `admin/` | Windows key manager. **Not part of the PWA — do not upload it.** |
 
@@ -186,33 +187,34 @@ Van Gogh palettes: **Starry Night** (deep indigo, chrome yellow) for dark, and
 for light the **splash artwork itself, sampled**. The amber field it is painted
 on is `--bg`, its book-page creams are the card surfaces, and the brown the
 wordmark is lettered in is `--text` — so the app is the same picture the splash
-is: cream pages laid on an amber ground. `--bgfx` adds the brush strokes that
-ground is built from, as an inline SVG tile. The tile is 520 px with strokes of
-varying length, weight and angle; a small tile of uniform arcs reads as a grid
-of commas rather than as paint.
+is: cream pages laid on an amber ground.
 
-Dark has artwork of its own: `goughread-bg-starry-g-village.svg`, a night sky
-over a village skyline, painted as the `body` background. It is **one picture,
-not a tile** — `cover`, `no-repeat`, anchored `bottom center`, so the rooftops
-sit behind the tab bar and the sky takes everything above them. A second
-horizon halfway up the screen reads as a mistake instantly, which is why the
-repeat is off. Nothing is washed over it: at any opacity worth seeing, the
-amber gradient light used to carry turned the sky grey, so the two washes were
-dropped rather than dimmed. `--bg` stays underneath as the colour the screen
-is while the file is still arriving.
+Since v17 both themes paint a **picture** as the `body` background (`--bgfx`),
+never a tile. Both use `cover` and `no-repeat`, because a repeated painting
+shows its seam instantly.
 
-The topbar and tabbar are transparent, so text does land on the picture. Every
-one of those labels was measured against the brightest pixel actually behind
-its own box: the worst is the active tab at 4.89:1, and the sky's own brightest
-point puts `--muted` at 5.35:1. The status bar needed a change too — it used to
-take `body`'s background colour, which in dark is no longer what the top of the
-screen looks like. The dark themes now set `--status` to `#172955`, sampled
-from the top edge of the sky at the horizontal centre, and `applyTheme()`
-prefers it when it is set. Light leaves it unset and keeps the old behaviour.
+- **Light: `goughread-bg-gold.webp`** (1116×2000, 388 KB), a gold swirl of
+  impasto strokes, anchored `center` on the swirl's eye. Raw, it averages
+  `#cd9d53` with darker strokes, which takes `--muted` under 3.3:1 for the text
+  that sits straight on it (grid authors, tab labels). A cream veil,
+  `rgba(253,244,221,.42)` layered over it in `--bgfx`, brings the average back
+  to 4.75:1.
+- **Dark: `goughread-bg-night.webp`** (2000×1493, 231 KB), a night sky of
+  swirling strokes over a dark hillside with lit windows, anchored
+  `bottom center` so the lights sit just above the tab bar. Its wave crests are
+  bright: raw, they put `--muted` at 3.1:1 on the brightest 5% of the picture.
+  A navy veil, `rgba(12,20,44,.35)`, brings that to 4.5:1. It is navy because
+  amber over a night sky turns it grey.
 
-Because `--bgfx` is now a picture in one theme and a tile in the other, its
-geometry is themed alongside it: `--bgfx-size`, `--bgfx-pos` and `--bgfx-repeat`
-carry the defaults in light and the cover/bottom/no-repeat set in dark.
+`--bg` stays underneath as the colour the screen is while a file is still
+arriving. The topbar and tabbar are transparent, so the status bar takes
+`--status`, the colour sampled from the painting's top edge under its veil:
+`#e9c892` in light and `#1a2d4c` in dark. `applyTheme()` prefers it over
+`body`'s background colour.
+
+The geometry is themed alongside the picture: `--bgfx-size`, `--bgfx-pos` and
+`--bgfx-repeat`. Up to v16 light used an inline SVG brush-stroke tile, and dark
+used `goughread-bg-starry-g-village.svg`. Both are gone from the app now.
 
 `--surface-3` is only ever the shelf board, so in light it is a wood brown
 rather than a third card colour — at a card-like tone it vanished into the
