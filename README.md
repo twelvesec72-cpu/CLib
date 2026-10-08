@@ -196,20 +196,22 @@ shows its seam instantly.
 - **Light: `goughread-bg-gold.webp`** (1116×2000, 388 KB), a gold swirl of
   impasto strokes, anchored `center` on the swirl's eye. Raw, it averages
   `#cd9d53` with darker strokes, which takes `--muted` under 3.3:1 for the text
-  that sits straight on it (grid authors, tab labels). A cream veil,
-  `rgba(253,244,221,.42)` layered over it in `--bgfx`, brings the average back
-  to 4.75:1.
+  that sits straight on it (grid authors, tab labels). A cream veil is layered
+  over it in `--bgfx`. v17 used `.42` (4.75:1 average), which looked washed
+  out. v18 uses `rgba(253,244,221,.28)`: about 4.3:1 average, with more of the
+  paint showing.
 - **Dark: `goughread-bg-night.webp`** (2000×1493, 231 KB), a night sky of
   swirling strokes over a dark hillside with lit windows, anchored
   `bottom center` so the lights sit just above the tab bar. Its wave crests are
   bright: raw, they put `--muted` at 3.1:1 on the brightest 5% of the picture.
-  A navy veil, `rgba(12,20,44,.35)`, brings that to 4.5:1. It is navy because
-  amber over a night sky turns it grey.
+  There is a navy veil over it: v17 used `.35` (4.5:1), and v18 uses
+  `rgba(12,20,44,.22)` (about 3.9:1), for the same reason as light. It is navy
+  because amber over a night sky turns it grey.
 
 `--bg` stays underneath as the colour the screen is while a file is still
 arriving. The topbar and tabbar are transparent, so the status bar takes
 `--status`, the colour sampled from the painting's top edge under its veil:
-`#e9c892` in light and `#1a2d4c` in dark. `applyTheme()` prefers it over
+`#e5be7f` in light and `#1c3252` in dark. `applyTheme()` prefers it over
 `body`'s background colour.
 
 The geometry is themed alongside the picture: `--bgfx-size`, `--bgfx-pos` and

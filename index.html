@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" media="(prefers-color-scheme: light)" content="#e9c892">
-<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1a2d4c">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#e5be7f">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1c3252">
 <link rel="preload" as="image" href="./splash.webp">
 <meta name="description" content="GoughRead — a private catalogue for a physical book collection.">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -57,15 +57,16 @@
      Geometry is a variable because dark anchors its picture differently.
      A cream veil sits on top: the raw painting averages #cd9d53 with darker
      strokes, which takes --muted under 3.3:1 for the text laid straight on it
-     (grid authors, tab labels). At .42 the average comes back to ~4.6:1. */
-  --bgfx:linear-gradient(rgba(253,244,221,.42), rgba(253,244,221,.42)),
+     (grid authors, tab labels). The veil is a trade: .42 gave 4.75:1 but
+     looked washed out, so it is .28 (Oct 2026) — 4.3:1 average, more paint. */
+  --bgfx:linear-gradient(rgba(253,244,221,.28), rgba(253,244,221,.28)),
          url("./goughread-bg-gold.webp");
   --bgfx-size:cover;
   --bgfx-pos:center;
   --bgfx-repeat:no-repeat;
   /* The painting's top edge under the veil, so the status bar runs on into
      it (see dark). */
-  --status:#e9c892;
+  --status:#e5be7f;
   --radius:14px;
   --radius-sm:9px;
   --shadow:0 1px 2px rgba(0,0,0,.06), 0 10px 30px rgba(0,0,0,.07);
@@ -100,16 +101,17 @@
        the lights behind the tab bar and gives the sky everything above them.
        The veil is navy, never amber (amber over a night sky turns it grey):
        the wave crests are bright enough to take --muted to 3.1:1 on the
-       brightest 5% of the picture, and .35 brings that back to 4.5:1. --bg
-       stays underneath as the colour the screen is while the file arrives. */
-    --bgfx:linear-gradient(rgba(12,20,44,.35), rgba(12,20,44,.35)), url("./goughread-bg-night.webp");
+       brightest 5% of the picture; .22 lifts that to ~3.9:1 (.35 reached 4.5
+       but washed the painting out). --bg stays underneath as the colour the
+       screen is while the file arrives. */
+    --bgfx:linear-gradient(rgba(12,20,44,.22), rgba(12,20,44,.22)), url("./goughread-bg-night.webp");
     --bgfx-size:cover;
     --bgfx-pos:bottom center;
     --bgfx-repeat:no-repeat;
     /* Sampled from the top edge of that sky, at the horizontal centre. The
        topbar is transparent, so the status bar has to match the picture rather
        than --bg, or it sits there as a darker band above it. */
-    --status:#1a2d4c;
+    --status:#1c3252;
     --shadow:0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.45);
   }
 }
@@ -133,11 +135,11 @@
   --reading:#f2c14e;
   --chev:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239fadd8' stroke-width='2.5' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>");
   /* Same scene as the media-query block above, where it is explained. */
-  --bgfx:linear-gradient(rgba(12,20,44,.35), rgba(12,20,44,.35)), url("./goughread-bg-night.webp");
+  --bgfx:linear-gradient(rgba(12,20,44,.22), rgba(12,20,44,.22)), url("./goughread-bg-night.webp");
   --bgfx-size:cover;
   --bgfx-pos:bottom center;
   --bgfx-repeat:no-repeat;
-  --status:#1a2d4c;
+  --status:#1c3252;
   --shadow:0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.45);
 }
 
