@@ -3724,11 +3724,12 @@ function runSplash(){
   const el = $('#splash');
   if(!el) return;
   const slow = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  /* The full sunflower plays once. After that it is a short fade: Android 12+
-     already shows its own launch screen first, and two splashes back to back
-     cost about 3.5 s on every cold start. */
+  /* The first run gets the longest look. Later cold starts used to get a
+     0.8 s blink — mostly fade-in, so the painting was barely seen (v20: the
+     user found it far too fast). Now every start holds it for a proper look;
+     a tap still skips it at any moment. */
   const first = !settings.splashSeen;
-  const hold = first ? (slow ? 1100 : 2300) : 800;
+  const hold = first ? (slow ? 2200 : 3200) : (slow ? 1600 : 2400);
   if(first){ settings.splashSeen = true; saveSettings(); }
   let gone = false;
 

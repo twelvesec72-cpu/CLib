@@ -147,9 +147,12 @@ have both behaviours from one element.
 
 `splash.webp` — the GoughRead sunflower, painted in impasto over the same gold
 swirl as the light background since v19 — shows on a cold start: the artwork
-fades in over about half a second, holds, and the whole layer fades out, gone
-from the DOM at ~2.9 s. Tapping skips it. `prefers-reduced-motion` gets the
-picture with no fades and a shorter hold.
+fades in over about half a second, holds, and the whole layer fades out.
+The fade-out starts at 3.2 s on the very first run and at 2.4 s on every
+later cold start, and the splash is gone from the DOM 0.6 s after that.
+Before v20, later starts got only 0.8 s, which was mostly fade-in and far too
+quick to see the painting. Tapping skips it. `prefers-reduced-motion` gets
+the picture with no fades and a shorter hold (2.2 s first, 1.6 s after).
 
 Three things it does deliberately:
 
