@@ -107,6 +107,27 @@ A loan is a name and a day, nothing more.
   cover. In list view, "Lent to Sarah" replaces the status word. Every view's
   accessible label includes it.
 
+## Pick my next book
+
+Set the status filter to **To read** and a **Pick my next book** pill appears
+above the books. Tap it to open a "Your next read" sheet.
+
+- **The shuffle.** The cover flicks through the pile for about a second, slowing
+  down, then settles on one book. With reduced motion it goes straight to the
+  pick.
+- **The pick.** The sheet shows the title, the author, the year, and how long the
+  book has been waiting ("On your list since May 2026 · 1 of 38 to read").
+- **The actions.**
+  - **Start reading** sets the book to Reading and closes the sheet.
+  - **Pick again** rolls again. It never repeats the current book, and skips the
+    last three picks while the pile has more than three books in it.
+  - **Open book** opens the book's normal sheet.
+- **What it picks from.** It draws from the books on screen, so a collection
+  filter or a search narrows it: "To read" + "Fantasy" picks an unread fantasy
+  book. Lent-out books are never offered.
+- **No stored state.** Nothing is saved; the recent-picks memory lasts only until
+  the app is closed.
+
 ## Photographed covers
 
 Any book's **Edit** screen has *Photograph it* (straight to the camera, via

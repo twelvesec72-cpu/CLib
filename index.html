@@ -428,6 +428,25 @@ label.field > span{display:block; font-size:13px; font-weight:650; color:var(--m
 .loanbox .who span{font-size:13px; color:var(--warn)}
 .loanbox .btn{flex:none}
 
+/* "Pick my next book": a small pill over the To read list, and the sheet it
+   opens, where the cover flicks through the pile and lands on one. */
+.pickrow{display:flex; justify-content:center; margin:-2px 0 12px}
+.pickbtn{display:inline-flex; align-items:center; gap:7px; min-height:40px; padding:0 16px 0 12px;
+  border:0; border-radius:20px; background:var(--accent); color:var(--on-accent);
+  font:inherit; font-size:14px; font-weight:700; box-shadow:0 1px 4px rgba(0,0,0,.18); position:relative;
+  transition:transform .08s ease-out, filter .08s ease-out}
+.pickbtn svg{width:19px; height:19px; flex:none}
+.pickbtn::after{content:""; position:absolute; inset:-4px 0}
+.pickbtn:active{transform:scale(.96); filter:brightness(.93)}
+.pickstage{display:flex; justify-content:center; margin:2px 0 14px}
+.pickstage .cover{width:132px; border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,.28)}
+.pickstage .cover.land{animation:pickland .32s ease-out}
+@keyframes pickland{0%{transform:scale(.9)} 60%{transform:scale(1.04)} 100%{transform:scale(1)}}
+.picktitle{font-family:var(--serif); font-weight:400; font-size:21px; line-height:1.2; text-align:center; overflow-wrap:anywhere}
+.pickby{text-align:center; color:var(--muted); font-size:14px; margin-top:4px}
+.pickwhen{text-align:center; color:var(--muted); font-size:13px; margin:4px 0 16px}
+.pickinfo.rolling{visibility:hidden}
+
 /* ------------------------------------------------------------ shelf view */
 /* Spines are drawn, not photographed — there is no spine-image source, and
    storing photos would mean base64 in localStorage. Thickness comes from the
@@ -695,6 +714,13 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
         <button data-v="list" aria-pressed="false" aria-label="List view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
         <button data-v="shelf" aria-pressed="false" aria-label="Shelf view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 20h16" stroke-linecap="round"/><rect x="5" y="7" width="3.4" height="10"/><rect x="10" y="5" width="3.4" height="12"/><rect x="15.4" y="8" width="3.4" height="9"/></svg></button>
       </div>
+    </div>
+    <!-- Only on "To read": the list you are choosing your next book from. -->
+    <div class="pickrow hide" id="pickRow">
+      <button class="pickbtn" id="btnPick">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="8.5" cy="8.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15.5" r="1.4" fill="currentColor" stroke="none"/></svg>
+        Pick my next book
+      </button>
     </div>
     <div id="libraryBody"></div>
   </section>
@@ -1626,6 +1652,7 @@ function renderLibrary(){
     ? books.length + (books.length === 1 ? ' book' : ' books') : '';
 
   $('#listBar').classList.toggle('hide', !books.length);
+  $('#pickRow').classList.add('hide');
   if(!books.length){
     // First run is also where someone arrives with a backup from the web
     // version, so importing is offered right here, not three screens away.
@@ -1649,6 +1676,7 @@ function renderLibrary(){
     ? '<b>' + list.length + '</b> of ' + books.length + ' shown · <button class="linkbtn" id="clearFilters2">Clear</button>'
     : '';
   if(filtered) $('#clearFilters2').onclick = clearFilters;
+  $('#pickRow').classList.toggle('hide', !pickPool().length);
   if(!list.length){
     body.innerHTML = '<div class="empty"><h2>Nothing matches</h2><p>Try a different search or clear the filters.</p>' +
                      '<button class="btn" id="clearFilters">Clear filters</button></div>';
@@ -1683,6 +1711,88 @@ function clearFilters(){
   $('#q').value = ''; $('#fCollection').value = ''; $('#fStatus').value = '';
   syncFilterStyles(); renderLibrary();
 }
+
+/* ------------------------------------------------- pick my next book -- */
+/* Offered only on "To read". It picks from what is on screen, so a collection
+   or a search narrows it ("To read" + "Fantasy" = an unread fantasy), and it
+   never offers a book that is lent out: that one is not on the shelf. */
+function pickPool(){
+  return $('#fStatus').value === 'want' ? visibleBooks().filter(b => !b.loanTo) : [];
+}
+let pickRecent = [];                       // the last few picks, so Pick again moves on
+function choosePick(pool, curId){
+  let from = pool.filter(b => b.id !== curId);
+  if(!from.length) return pool[0];
+  if(pool.length > 3){
+    const fresh = from.filter(b => !pickRecent.includes(b.id));
+    if(fresh.length) from = fresh;
+  }
+  return from[Math.floor(Math.random() * from.length)];
+}
+function openPicker(){
+  if(!pickPool().length) return;
+  openSheet('Your next read',
+    '<div class="pickstage" id="pickStage"></div>' +
+    '<div class="pickinfo" id="pickInfo"></div>' +
+    '<button class="btn primary wide" id="pickStart">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor">' + STATUS_ICON.reading + '</svg>Start reading</button>' +
+    '<div class="row" style="margin-top:10px">' +
+      '<button class="btn" id="pickAgain">Pick again</button>' +
+      '<button class="btn" id="pickOpen">Open book</button>' +
+    '</div>');
+  rollPick(null);
+}
+/** Flick through the pile, slowing down, then land on one. */
+function rollPick(curId){
+  const pool = pickPool();
+  if(!pool.length){ closeSheet(); return; }
+  const pick = choosePick(pool, curId);
+  pickRecent = pickRecent.filter(id => id !== pick.id).concat(pick.id).slice(-3);
+  const stage = $('#pickStage'), info = $('#pickInfo');
+  const btns = ['#pickStart', '#pickAgain', '#pickOpen'].map(s => $(s));
+  const quiet = pool.length < 2 || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const land = () => {
+    if(!document.contains(stage)) return;         // the sheet was closed mid-roll
+    stage.innerHTML = coverHtml(pick, 'land');
+    hydratePhotos(stage);
+    const since = new Date(pick.dateAdded);
+    info.innerHTML =
+      '<div class="picktitle">' + esc(pick.title) + '</div>' +
+      '<div class="pickby">' + esc(byline(pick)) + (pick.publishedYear ? ' · ' + esc(pick.publishedYear) : '') + '</div>' +
+      '<div class="pickwhen">' + (isNaN(since) ? '' : 'On your list since ' +
+        esc(since.toLocaleDateString(undefined, { month:'short', year:'numeric' })) + ' · ') +
+        (pool.length === 1 ? 'your only one to read' : '1 of ' + pool.length + ' to read') + '</div>';
+    info.classList.remove('rolling');
+    btns.forEach(b => b.disabled = false);
+    $('#pickAgain').hidden = pool.length < 2;
+    $('#pickStart').onclick = () => {
+      updateBook(pick.id, { readStatus:'reading' });
+      haptic();
+      closeSheet(); renderLibrary();
+      toast('Enjoy ' + pick.title + '.', 'ok', 2600);
+    };
+    $('#pickAgain').onclick = () => rollPick(pick.id);
+    $('#pickOpen').onclick = () => openDetail(pick.id);
+    haptic();
+  };
+  if(quiet){ land(); return; }
+  info.classList.add('rolling');
+  btns.forEach(b => b.disabled = true);
+  // eight covers, each held a little longer than the last: about 0.95 s
+  const steps = [55, 65, 80, 95, 115, 140, 175, 220];
+  let i = 0, last = null;
+  const flick = () => {
+    if(!document.contains(stage)) return;
+    if(i === steps.length){ land(); return; }
+    const others = pool.filter(b => b !== last && b !== pick);
+    last = others.length ? others[Math.floor(Math.random() * others.length)] : pick;
+    stage.innerHTML = coverHtml(last);
+    hydratePhotos(stage);
+    setTimeout(flick, steps[i++]);
+  };
+  flick();
+}
+
 /** Marks the current view in the grid / list / shelf switch. */
 function applyViewIcon(){
   const cur = settings.view === 'list' || settings.view === 'shelf' ? settings.view : 'grid';
@@ -3568,6 +3678,7 @@ function wireUp(){
   $('#fSort').onchange = e => { settings.sort = e.target.value; saveSettings(); renderLibrary(); };
   $('#fCollection').onchange = () => { syncFilterStyles(); renderLibrary(); };
   $('#fStatus').onchange = () => { syncFilterStyles(); renderLibrary(); };
+  $('#btnPick').onclick = () => openPicker();
 
   const setMode = m => {
     settings.scanMode = m; saveSettings();
