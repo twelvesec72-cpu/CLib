@@ -251,7 +251,7 @@ main{
 
 .tabbar{
   flex:none; z-index:40;
-  display:grid; grid-template-columns:repeat(4,1fr);
+  display:grid; grid-template-columns:repeat(5,1fr);
   padding-bottom:var(--safe-b);
   background:transparent;
   border-top:1px solid var(--border);
@@ -414,6 +414,18 @@ label.field > span{display:block; font-size:13px; font-weight:650; color:var(--m
   display:grid; place-items:center; background:var(--surface); box-shadow:0 1px 4px rgba(0,0,0,.4)}
 .cover .st svg{width:15px; height:15px}
 .cover .st.read{color:var(--ok)} .cover .st.reading{color:var(--reading)}
+/* audiobooks: square art on top, a band below that says so */
+.cover.audio img{inset:0 0 auto 0; height:66.667%}
+.cover.audio .ph{margin-bottom:33%}
+.cover.audio .st{bottom:calc(33.333% + 5px)}
+.aband{position:absolute; left:0; right:0; bottom:0; height:33.333%; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:3px; background:var(--surface); color:var(--accent-ink);
+  border-top:1px solid var(--border); font-size:11px; font-weight:700; letter-spacing:.02em}
+.aband svg{width:24px; height:24px}
+.list .aband span, .result .aband span, .qitem .aband span, .confirmcard .aband span{display:none}
+.list .aband svg, .result .aband svg, .qitem .aband svg, .confirmcard .aband svg{width:11px; height:11px}
+.stword.audio{color:var(--accent-ink)}
+.shelf .sp .sphp{width:13px; height:13px; flex:none; margin:3px 0}
 .stword{font-weight:700} .stword.read{color:var(--ok)} .stword.reading{color:var(--reading)}
 .stword.lent{color:var(--warn)}
 /* A lent book says who has it across the top of its cover, clear of the
@@ -639,6 +651,7 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
 .result .cover{width:40px; flex:none}
 .result .t{font-size:14.5px; font-weight:620; line-height:1.3}
 .result .a{font-size:13px; color:var(--muted)}
+.result .rtag{display:inline-block; margin-top:4px; padding:1px 7px; border-radius:9px; font-size:11px; font-weight:700; background:var(--surface-2); color:var(--muted)}
 
 .meter{height:8px; border-radius:4px; background:var(--surface-2); overflow:hidden; margin:8px 0 6px}
 .meter i{display:block; height:100%; background:var(--accent)}
@@ -703,6 +716,7 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
         <option value="reading">Reading</option>
         <option value="read">Read</option>
         <option value="loan">On loan</option>
+        <option value="audio">Audiobooks</option>
       </select>
     </div>
     <!-- Shows all three views with the current one marked. It used to be one
@@ -830,6 +844,11 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
   <button data-view="scan">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M3 8V5.5A1.5 1.5 0 014.5 4H7M17 4h2.5A1.5 1.5 0 0121 5.5V8M21 16v2.5a1.5 1.5 0 01-1.5 1.5H17M7 20H4.5A1.5 1.5 0 013 18.5V16"/><path d="M7 8v8M10 8v8M13.5 8v8M17 8v8" stroke-width="1.6"/></svg>
     Scan
+  </button>
+  <!-- not a screen: it opens the "Add an audiobook" sheet over whichever one is up -->
+  <button data-action="audio" aria-label="Add an audiobook">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v-3a8 8 0 0116 0v3"/><rect x="3" y="14" width="5" height="7" rx="1.6"/><rect x="16" y="14" width="5" height="7" rx="1.6"/></svg>
+    Audio
   </button>
   <button data-view="review">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 12h10M4 18h7"/><path d="M15.5 17.5l2 2 4-4.5"/></svg>
@@ -986,6 +1005,8 @@ const saveQueue       = () => lsSet(KEY.queue, queue);
 const saveSettings    = () => lsSet(KEY.settings, settings);
 
 function normaliseBook(b){
+  // an audiobook has no shelf to stand on and is never lent out
+  const audio = b.format === 'audio';
   return {
     id: b.id || uuid(),
     isbn13: str(b.isbn13), isbn10: str(b.isbn10),
@@ -1001,17 +1022,20 @@ function normaliseBook(b){
     pageCount: num(b.pageCount),
     series: str(b.series),
     seriesVolume: num(b.seriesVolume),
-    shelf: str(b.shelf),
+    shelf: audio ? '' : str(b.shelf),
     collections: Array.isArray(b.collections) ? b.collections.map(str).filter(Boolean) : [],
     readStatus: ['want','reading','read'].includes(b.readStatus) ? b.readStatus : 'want',
+    // 'book' (on paper) or 'audio'. Older records have no format: they are books.
+    format: audio ? 'audio' : 'book',
+    narrator: audio ? str(b.narrator) : '',
     // the day it was finished, as a plain local date (YYYY-MM-DD), or ''.
     // Kept if the status later moves off Read, so a slip or a re-read never
     // throws the original date away. Older records simply normalise to ''.
     dateFinished: /^\d{4}-\d{2}-\d{2}$/.test(str(b.dateFinished)) ? str(b.dateFinished) : '',
     // who has it now ('' = at home) and since when. Returned loans move into
     // loanHistory, oldest first, so "who borrowed this last" is never lost.
-    loanTo: str(b.loanTo),
-    loanDate: str(b.loanTo) ? ymd(b.loanDate) : '',
+    loanTo: audio ? '' : str(b.loanTo),
+    loanDate: !audio && str(b.loanTo) ? ymd(b.loanDate) : '',
     loanHistory: arr(b.loanHistory)
       .map(h => ({ to: str(h && h.to), from: ymd(h && h.from), back: ymd(h && h.back) }))
       .filter(h => h.to),
@@ -1538,18 +1562,29 @@ function ensureCollection(name){
    act, and it is a picture of the actual copy on the actual shelf. Its src
    cannot be set inline because reading the Blob is async, so it is marked and
    filled in by hydratePhotos once the sheet or list is in the document. */
+/* An audiobook keeps the same 2:3 tile as a book so the grid stays even. Its
+   artwork is square, so it fills the top two thirds and a band underneath
+   says what it is: a pair of headphones and the word. */
+const AUDIO_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v-3a8 8 0 0116 0v3"/><rect x="3" y="14" width="5" height="7" rx="1.6"/><rect x="16" y="14" width="5" height="7" rx="1.6"/></svg>';
+const AUDIO_BAND = '<span class="aband" aria-hidden="true">' + AUDIO_ICON + '<span>Audiobook</span></span>';
 function coverHtml(b, cls, extra){
   const pid = str(b.coverPhotoId);
   const img = pid ? '<img alt="" data-photo="' + esc(pid) + '">'
             : b.coverUrl ? '<img loading="lazy" alt="" src="' + esc(b.coverUrl) + '">'
             : '';
-  return '<div class="cover' + (cls ? ' ' + cls : '') + '">' +
-         '<span class="ph">' + esc(b.title) + '</span>' + img + (extra || '') +
+  const audio = b.format === 'audio';
+  return '<div class="cover' + (audio ? ' audio' : '') + (cls ? ' ' + cls : '') + '">' +
+         '<span class="ph">' + esc(b.title) + '</span>' + img + (audio ? AUDIO_BAND : '') + (extra || '') +
          '</div>';
 }
 
 /* ---- read status, said in words and shapes as well as colour ---- */
 const STATUS_WORD = { want:'Want to read', reading:'Reading', read:'Read' };
+/* The same three states, said the way you would of an audiobook. Only the
+   words change: the stored value is still want / reading / read. */
+const LISTEN_WORD = { want:'Want to listen', reading:'Listening', read:'Listened' };
+const statusWords = audio => audio ? LISTEN_WORD : STATUS_WORD;
+const statusWord  = b => statusWords(b.format === 'audio')[b.readStatus];
 const STATUS_ICON = {
   read:'<path d="M5 12.5l4.2 4.2L19 7" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>',
   reading:'<path d="M3.5 6.5C6 5.6 9 5.8 12 7.4c3-1.6 6-1.8 8.5-.9v11c-2.5-.9-5.5-.7-8.5.9-3-1.6-6-1.8-8.5-.9z" stroke-width="2" stroke-linejoin="round"/><path d="M12 7.4v11" stroke-width="2"/>'
@@ -1565,11 +1600,12 @@ function loanRibbon(b){
 }
 /** ", lent to Sarah" for labels that are read aloud, or ''. */
 const loanWords = b => b.loanTo ? ', lent to ' + b.loanTo : '';
+const audioWords = b => b.format === 'audio' ? ', audiobook' : '';
 /** One segmented control, used in the detail sheet and the editor. */
-function statusSeg(id, cur){
-  return '<div class="seg" role="group" aria-label="Read status" id="' + id + '">' +
+function statusSeg(id, cur, audio){
+  return '<div class="seg" role="group" aria-label="' + (audio ? 'Listening' : 'Read') + ' status" id="' + id + '">' +
     ['want','reading','read'].map(v => '<button type="button" data-v="' + v + '" aria-pressed="' +
-      (cur === v ? 'true' : 'false') + '">' + STATUS_WORD[v] + '</button>').join('') + '</div>';
+      (cur === v ? 'true' : 'false') + '">' + statusWords(audio)[v] + '</button>').join('') + '</div>';
 }
 function wireSeg(el, onPick){
   $$('button', el).forEach(btn => btn.onclick = () => {
@@ -1644,7 +1680,7 @@ function spineHtml(b){
   const w = Math.round(Math.min(50, Math.max(23, 23 + pages / 26)));
   const ht = 132 + ((h >>> 8) % 5) * 9;
   const surname = (b.authors[0] || '').trim().split(/\s+/).pop() || '';
-  const label = b.title + ' — ' + byline(b) + ', ' + STATUS_WORD[b.readStatus] + loanWords(b);
+  const label = b.title + ' — ' + byline(b) + audioWords(b) + ', ' + statusWord(b) + loanWords(b);
   return '<button class="sp" data-id="' + esc(b.id) + '" title="' + esc(label) + '" aria-label="' + esc(label) + '"' +
     ' style="--w:' + w + 'px;--h:' + ht + 'px;--c:' + c + ';--fg:' + fg + '">' +
     '<span class="body">' +
@@ -1652,6 +1688,7 @@ function spineHtml(b){
       '<span class="band"></span>' +
       '<span class="ttl">' + esc(b.title) + '</span>' +
       (surname ? '<span class="au">' + esc(surname) + '</span>' : '') +
+      (b.format === 'audio' ? AUDIO_ICON.replace('<svg ', '<svg class="sphp" ') : '') +
       '<span class="band"></span>' +
     '</span></button>';
 }
@@ -1682,13 +1719,15 @@ function visibleBooks(){
   let out = books;
   if(coll)  out = out.filter(b => b.collections.includes(coll));
   // "On loan" sits in the status filter but is not a read status
-  if(st === 'loan') out = out.filter(b => b.loanTo);
-  else if(st)       out = out.filter(b => b.readStatus === st);
+  if(st === 'loan')       out = out.filter(b => b.loanTo);
+  else if(st === 'audio') out = out.filter(b => b.format === 'audio');
+  else if(st)             out = out.filter(b => b.readStatus === st);
   if(q){
     const terms = q.split(/\s+/);
     out = out.filter(b => {
       const hay = [b.title, b.authors.join(' '), b.series, b.publisher, b.shelf,
-                   b.isbn13, b.isbn10, b.collections.join(' '), b.loanTo].join(' ').toLowerCase();
+                   b.isbn13, b.isbn10, b.collections.join(' '), b.loanTo, b.narrator,
+                   b.format === 'audio' ? 'audiobook' : ''].join(' ').toLowerCase();
       return terms.every(t => hay.indexOf(t) !== -1);
     });
   }
@@ -1741,16 +1780,17 @@ function renderLibrary(){
     : list.map(b => {
         // list says the status in words; grid puts a badge on the cover.
         // A loan outranks the read status in the list: it is the thing to act on.
+        const fmt = mode === 'list' && b.format === 'audio' ? '<span class="stword audio">Audiobook</span> · ' : '';
         const word = mode !== 'list' ? ''
           : b.loanTo ? '<span class="stword lent">Lent to ' + esc(b.loanTo) + '</span> · '
-          : b.readStatus !== 'want' ? '<span class="stword ' + b.readStatus + '">' + STATUS_WORD[b.readStatus] + '</span> · '
+          : b.readStatus !== 'want' ? '<span class="stword ' + b.readStatus + '">' + statusWord(b) + '</span> · '
           : '';
         return '<button class="book" data-id="' + esc(b.id) + '" aria-label="' +
-            esc(b.title + ', ' + byline(b) + ', ' + STATUS_WORD[b.readStatus] + loanWords(b)) + '">' +
+            esc(b.title + ', ' + byline(b) + audioWords(b) + ', ' + statusWord(b) + loanWords(b)) + '">' +
           coverHtml(b, '', mode === 'grid' ? statusBadge(b) + loanRibbon(b) : '') +
           '<div class="meta" aria-hidden="true">' +
             '<div class="t">' + esc(b.title) + '</div>' +
-            '<div class="a">' + word + esc(byline(b)) + '</div>' +
+            '<div class="a">' + fmt + word + esc(byline(b)) + '</div>' +
           '</div>' +
         '</button>';
       }).join('');
@@ -1989,19 +2029,23 @@ function openDetail(id){
   const b = books.find(x => x.id === id);
   if(!b) return;
   const fact = (k, v) => v ? '<dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd>' : '';
-  openSheet('Book',
+  const audio = b.format === 'audio';
+  openSheet(audio ? 'Audiobook' : 'Book',
     '<div class="detail-top">' + coverHtml(b) +
       '<div><h2>' + esc(b.title) + '</h2><div class="by">' + esc(byline(b)) + '</div></div></div>' +
     // the most common change there is — one tap, saved at once, no editor
-    statusSeg('dStatus', b.readStatus) +
+    statusSeg('dStatus', b.readStatus, audio) +
     (b.loanTo
       ? '<div class="loanbox"><div class="who"><b>Lent to ' + esc(b.loanTo) + '</b>' +
           (b.loanDate ? '<span>since ' + esc(fmtDayShort(b.loanDate)) + ' · ' + esc(sinceDay(b.loanDate)) + '</span>' : '') +
         '</div><button class="btn sm primary" id="dReturn">Mark returned</button></div>'
+      : audio ? ''                       // nothing on a shelf to hand over
       : '<button class="btn wide" id="dLend" style="margin-top:12px">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg>' +
           'Lend this book</button>') +
     '<dl class="facts" style="margin-top:16px">' +
+      fact('Format', audio ? 'Audiobook' : '') +
+      fact('Narrated by', b.narrator) +
       fact('Finished', b.readStatus === 'read' ? fmtDay(b.dateFinished) : '') +
       lentBefore(b) +
       fact('Series', b.series ? (b.series + (b.seriesVolume !== null ? ' #' + b.seriesVolume : '')) : '') +
@@ -2017,15 +2061,16 @@ function openDetail(id){
     '</dl>' +
     '<button class="btn primary wide" id="dEdit" style="margin-top:18px">Edit details</button>' +
     // set apart and quieter than Edit, so it is never the button you hit by mistake
-    '<div class="detail-del"><button class="btn ghost dangertext sm" id="dDel">Delete this book</button></div>');
+    '<div class="detail-del"><button class="btn ghost dangertext sm" id="dDel">Delete this ' + (audio ? 'audiobook' : 'book') + '</button></div>');
   wireSeg($('#dStatus'), v => {
     const nb = updateBook(b.id, { readStatus:v });
     renderLibrary();
     // redraw so the Finished line appears (or goes) straight away
     openDetail(b.id);
+    const said = statusWords(audio)[v].toLowerCase();
     toast(v === 'read' && nb && nb.dateFinished
-      ? 'Marked as read · finished ' + fmtDay(nb.dateFinished) + '.'
-      : 'Marked as ' + STATUS_WORD[v].toLowerCase() + '.', 'ok', 2200);
+      ? 'Marked as ' + said + ' · finished ' + fmtDay(nb.dateFinished) + '.'
+      : 'Marked as ' + said + '.', 'ok', 2200);
   });
   if(b.loanTo){
     $('#dReturn').onclick = () => {
@@ -2037,14 +2082,14 @@ function openDetail(id){
       openDetail(b.id);
       toast('Returned by ' + who + '.', 'ok', 2200);
     };
-  } else {
+  } else if(!audio){
     $('#dLend').onclick = () => openLend(b.id);
   }
   $('#dEdit').onclick = () => openEditor(books.find(x => x.id === id) || b);
   $('#dDel').onclick = async () => {
     sheetCloser = null;
     const ok = await confirmDialog({
-      title:'Delete this book?', body:'“' + b.title + '” will be removed from this device.',
+      title:'Delete this ' + (audio ? 'audiobook' : 'book') + '?', body:'“' + b.title + '” will be removed from this device.',
       confirmLabel:'Delete', danger:true });
     if(ok){ deleteBook(b.id); closeSheet(); renderLibrary(); toast('Deleted.'); }
     else openDetail(id);
@@ -2108,22 +2153,33 @@ function openLend(id){
 }
 
 /* -------------------------------------------------------- book editor -- */
-function openEditor(book){
-  const b = book ? Object.assign({}, book) : normaliseBook({ source:'manual' });
+function openEditor(book, opts){
+  const b = book ? Object.assign({}, book)
+                 : normaliseBook({ source:'manual', format: opts && opts.format });
+  const audio = b.format === 'audio';
   const isNew = !book;
   const collBoxes = collections.map(c =>
     '<button type="button" class="chip" data-coll="' + esc(c) + '" aria-pressed="' +
     (b.collections.includes(c) ? 'true' : 'false') + '">' + esc(c) + '</button>').join('');
 
   refreshShelfList();          // suggestions for the Shelf field
-  openSheet(isNew ? 'Add a book' : 'Edit book',
+  openSheet(isNew ? (audio ? 'Add an audiobook' : 'Add a book') : (audio ? 'Edit audiobook' : 'Edit book'),
     '<label class="field"><span>Title</span><input type="text" id="eTitle" value="' + esc(b.title === 'Untitled' && isNew ? '' : b.title) + '"></label>' +
     '<label class="field"><span>Authors (comma separated)</span><input type="text" id="eAuthors" value="' + esc(b.authors.join(', ')) + '"></label>' +
-    '<div class="field"><span class="flabel">Read status</span>' + statusSeg('eStatus', b.readStatus) + '</div>' +
+    // a book bought as the wrong format can be put right here
+    '<div class="field"><span class="flabel">Format</span>' +
+      '<div class="seg" role="group" aria-label="Format" id="eFormat">' +
+        '<button type="button" data-v="book" aria-pressed="' + (audio ? 'false' : 'true') + '">Book</button>' +
+        '<button type="button" data-v="audio" aria-pressed="' + (audio ? 'true' : 'false') + '">Audiobook</button>' +
+      '</div></div>' +
+    '<label class="field' + (audio ? '' : ' hide') + '" id="eNarrRow"><span>Narrator</span>' +
+      '<input type="text" id="eNarr" autocomplete="off" value="' + esc(b.narrator) + '"></label>' +
+    '<div class="field"><span class="flabel" id="eStatusLbl">' + (audio ? 'Listening status' : 'Read status') + '</span>' +
+      statusSeg('eStatus', b.readStatus, audio) + '</div>' +
     // only meaningful once a book is Read; blank is allowed (date unknown)
-    '<label class="field' + (b.readStatus === 'read' ? '' : ' hide') + '" id="eFinishedRow"><span>Finished reading</span>' +
+    '<label class="field' + (b.readStatus === 'read' ? '' : ' hide') + '" id="eFinishedRow"><span id="eFinishedLbl">' + (audio ? 'Finished listening' : 'Finished reading') + '</span>' +
       '<input type="date" id="eFinished" max="' + today() + '" value="' + esc(b.dateFinished) + '"></label>' +
-    '<label class="field"><span>Shelf</span><input type="text" id="eShelf" list="shelfList" autocomplete="off" placeholder="Living room — top shelf" value="' + esc(b.shelf) + '"></label>' +
+    '<label class="field' + (audio ? ' hide' : '') + '" id="eShelfRow"><span>Shelf</span><input type="text" id="eShelf" list="shelfList" autocomplete="off" placeholder="Living room — top shelf" value="' + esc(b.shelf) + '"></label>' +
     '<div class="field"><span class="flabel">Collections</span>' +
       '<div class="chips" id="eColls">' + (collBoxes || '<span class="hint">None yet — add one below.</span>') + '</div>' +
       '<div class="row" style="margin-top:9px"><input type="text" id="eNewColl" aria-label="New collection name" placeholder="New collection">' +
@@ -2170,6 +2226,15 @@ function openEditor(book){
   const sheetEl = $('#sheet');
   sheetEl.addEventListener('input', () => { dirty = true; });
   sheetEl.addEventListener('change', () => { dirty = true; });
+  wireSeg($('#eFormat'), v => {
+    dirty = true;
+    $('#eNarrRow').classList.toggle('hide', v !== 'audio');
+    $('#eShelfRow').classList.toggle('hide', v === 'audio');
+    const words = statusWords(v === 'audio');
+    $$('#eStatus button').forEach(x => { x.textContent = words[x.dataset.v]; });
+    $('#eStatusLbl').textContent   = v === 'audio' ? 'Listening status' : 'Read status';
+    $('#eFinishedLbl').textContent = v === 'audio' ? 'Finished listening' : 'Finished reading';
+  });
   wireSeg($('#eStatus'), v => {
     dirty = true;
     $('#eFinishedRow').classList.toggle('hide', v !== 'read');
@@ -2279,6 +2344,8 @@ function openEditor(book){
       publishedYear: $('#eYear').value,
       pageCount: $('#ePages').value,
       shelf: $('#eShelf').value.trim(),
+      format: $('#eFormat button[aria-pressed="true"]').dataset.v,
+      narrator: $('#eNarr').value.trim(),
       readStatus: segValue($('#eStatus')),
       // always passed, even blank, so updateBook never stamps over a choice
       dateFinished: $('#eFinished').value,
@@ -2393,6 +2460,72 @@ function openManualAdd(opts){
     }
   };
 }
+/* -------------------------------------------------------- audiobooks -- */
+/* Added by search, not by barcode: an audiobook has no barcode to scan. Apple's
+   audiobook search has the real audiobook artwork (square, the narrator often
+   on it); Open Library is asked at the same time, for anything Apple lacks,
+   and offers the print cover. Neither result keeps an ISBN — search ISBNs are
+   print editions', and would flag the paper copy you own as a duplicate. */
+const NUM_WORDS = ['zero','one','two','three','four','five','six','seven','eight','nine','ten',
+                   'eleven','twelve','thirteen','fourteen','fifteen'];
+async function searchAppleAudio(title, author){
+  const term = [title, author].filter(Boolean).join(' ');
+  const q = new URLSearchParams({ term, media:'audiobook', entity:'audiobook', country:'us', limit:'6' });
+  const r = await fetchJson('https://itunes.apple.com/search?' + q.toString());
+  return arr(r && r.results).map(x => {
+    let t = str(x.collectionName).replace(/\s*\((un)?abridged\)\s*$/i, '');
+    // "Magnus Chase and the Gods of Asgard, Book One: The Sword of Summer"
+    let series = '', vol = null;
+    const m = /^(.+?),\s*Book\s+(\w+)\s*:\s*(.+)$/i.exec(t);
+    if(m){
+      series = m[1]; t = m[3];
+      vol = /^\d+$/.test(m[2]) ? +m[2] : NUM_WORDS.indexOf(m[2].toLowerCase());
+      if(vol < 0) vol = null;
+    }
+    return normaliseBook({
+      title: t, format:'audio', source:'manual',
+      authors: str(x.artistName).split(/\s*(?:,|&|\band\b)\s*/).filter(Boolean),
+      series, seriesVolume: vol, publishedYear: yearFrom(x.releaseDate),
+      coverUrl: str(x.artworkUrl100).replace(/\/\d+x\d+bb\.(jpg|png)$/, '/600x600bb.$1')
+    });
+  });
+}
+function openAudioAdd(){
+  openSheet('Add an audiobook',
+    '<div class="card"><h3>Find it</h3>' +
+      '<label class="field"><span>Title</span><input type="text" id="aTitle" autocomplete="off" enterkeyhint="search"></label>' +
+      '<label class="field"><span>Author</span><input type="text" id="aAuthor" autocomplete="off" enterkeyhint="search"></label>' +
+      '<button class="btn primary wide" id="aSearchGo">Search for the cover</button>' +
+      '<div id="aResults" style="margin-top:12px"></div></div>' +
+    '<button class="btn wide" id="aByHand">Enter it by hand</button>');
+  $('#aByHand').onclick = () => openEditor(null, { format:'audio' });
+  ['#aTitle', '#aAuthor'].forEach(s => $(s).addEventListener('keydown', e => { if(e.key === 'Enter') $('#aSearchGo').click(); }));
+  $('#aSearchGo').onclick = async () => {
+    const t = $('#aTitle').value.trim(), a = $('#aAuthor').value.trim();
+    if(!t && !a){ fieldError($('#aTitle'), 'Enter a title or an author.'); return; }
+    const box = $('#aResults');
+    box.innerHTML = '<p class="hint">Searching…</p>';
+    const [apple, ol] = await Promise.allSettled([searchAppleAudio(t, a), searchOpenLibrary(t, a)]);
+    const found = (apple.status === 'fulfilled' ? apple.value.slice(0, 5) : []).map(d => ({ d, tag:'Audiobook cover' }))
+      .concat((ol.status === 'fulfilled' ? ol.value.slice(0, 3) : []).map(d => ({ tag:'Print cover',
+        d: normaliseBook(Object.assign({}, d, { format:'audio', isbn13:'', isbn10:'', publisher:'', pageCount:null })) })));
+    if(!found.length){
+      box.innerHTML = '<p class="hint">' + (apple.status === 'rejected' && ol.status === 'rejected'
+        ? 'Could not reach the search — check your connection.' : 'No matches. Try fewer words, or enter it by hand.') + '</p>';
+      return;
+    }
+    box.innerHTML = found.map((f, i) =>
+      '<button class="result" data-i="' + i + '">' + coverHtml(f.d) +
+      '<div class="meta"><div class="t">' + esc(f.d.title) + '</div>' +
+      '<div class="a">' + esc(byline(f.d)) + (f.d.publishedYear ? ' · ' + f.d.publishedYear : '') + '</div>' +
+      '<span class="rtag">' + esc(f.tag) + '</span></div></button>').join('');
+    hydratePhotos(box);
+    $$('.result', box).forEach(el => el.onclick = () => {
+      openEditor(null, { format:'audio' }); prefillEditor(found[+el.dataset.i].d);
+    });
+  };
+}
+
 /** Push a looked-up record into an already-open editor sheet. */
 function prefillEditor(d){
   $('#eTitle').value   = d.title === 'Untitled' ? '' : d.title;
@@ -2404,6 +2537,7 @@ function prefillEditor(d){
   $('#eIsbn').value    = d.isbn13 || '';
   $('#ePages').value   = d.pageCount === null ? '' : d.pageCount;
   $('#eCover').value   = d.coverUrl || '';
+  if(d.narrator) $('#eNarr').value = d.narrator;
   // keep the cover preview in step with what was just looked up. Only ever
   // called on a freshly opened editor, so there is no photo to displace.
   const prev = $('#eCoverPrev');
@@ -3131,7 +3265,7 @@ function renderReview(){
    re-photographing. The JSON backup is the one that keeps the pictures. */
 const CSV_HEADER = ['id','isbn13','isbn10','title','authors','series','seriesVolume','publisher',
                     'publishedYear','pageCount','shelf','collections','readStatus','coverUrl',
-                    'coverPhoto','dateAdded','dateFinished','loanTo','loanDate'];
+                    'coverPhoto','dateAdded','dateFinished','loanTo','loanDate','format','narrator'];
 
 function csvCell(v){
   const s = (v === null || v === undefined) ? '' : String(v);
@@ -3146,7 +3280,8 @@ function booksToCsv(list){
       b.publishedYear === null ? '' : b.publishedYear,
       b.pageCount === null ? '' : b.pageCount,
       b.shelf, b.collections.join('|'), b.readStatus, b.coverUrl,
-      b.coverPhotoId ? 'yes' : '', b.dateAdded, b.dateFinished, b.loanTo, b.loanDate
+      b.coverPhotoId ? 'yes' : '', b.dateAdded, b.dateFinished, b.loanTo, b.loanDate,
+      b.format, b.narrator
     ].map(csvCell).join(','));
   });
   return '﻿' + rows.join('\r\n') + '\r\n';
@@ -3300,6 +3435,7 @@ function rowsToBooks(rows){
       dateFinished: get('dateFinished').trim(),   // absent in older exports: ''
       // the current loan only; past loans travel in the JSON backup
       loanTo: get('loanTo'), loanDate: get('loanDate').trim(),
+      format: get('format').trim().toLowerCase(), narrator: get('narrator'),   // '' in older exports: books
       source: 'manual'
     }));
   }
@@ -3778,6 +3914,7 @@ function showView(name){
 /* ================================================================== wire */
 function wireUp(){
   $$('.tabbar button').forEach(b => b.onclick = () => {
+    if(b.dataset.action === 'audio'){ openAudioAdd(); return; }
     // the tap is the user gesture the beep needs, if the camera auto-starts
     if(b.dataset.view === 'scan') primeAudio();
     showView(b.dataset.view);

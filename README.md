@@ -107,6 +107,48 @@ A loan is a name and a day, nothing more.
   cover. In list view, "Lent to Sarah" replaces the status word. Every view's
   accessible label includes it.
 
+## Audiobooks (v24)
+
+The **Audio** button in the bottom bar (headphones icon) opens **Add an
+audiobook**. It is a button, not a screen: it opens a sheet over whichever
+screen is showing.
+
+- **Finding it.** Type a title and/or author and tap **Search for the cover**.
+  Two searches run at once:
+  - Apple's public audiobook search, `itunes.apple.com/search`
+    (`media=audiobook`, `country=us`, no key, CORS-open). It has the real
+    audiobook artwork, which is square.
+  - Open Library's search, for anything Apple lacks; it offers the print cover.
+
+  Each result is tagged *Audiobook cover* or *Print cover*. **Enter it by
+  hand** skips the search.
+- **Tidying Apple's titles.** Apple's artwork is fetched at 600×600, and its
+  titles are tidied:
+  "Magnus Chase and the Gods of Asgard, Book One: The Sword of Summer
+  (Unabridged)" becomes title *The Sword of Summer*, series *Magnus Chase and
+  the Gods of Asgard*, volume 1.
+- **No ISBN is kept from a search.** Search ISBNs belong to print editions, so
+  keeping one would flag a paper copy you own as a duplicate. You can own both.
+- **Record.** `format: 'audio'` (`'book'` otherwise) and `narrator` (optional,
+  searchable). `normaliseBook` forces `shelf`, `loanTo` and `loanDate` empty on
+  audio, so an audiobook can never carry a loan or a shelf.
+- **Words.** The three states are still stored as `want` / `reading` / `read`,
+  but an audiobook says **Want to listen / Listening / Listened** everywhere:
+  - the status switch and the editor;
+  - list view and the accessible labels;
+  - the "Marked as…" toast.
+- **Editor.** A **Book / Audiobook** switch fixes a wrong format. It shows
+  Narrator, hides Shelf, and relabels the status words as you flip it.
+- **Library.**
+  - The tile keeps the 2:3 shape. The square art fills the top two thirds, and a
+    band below shows headphones and "Audiobook".
+  - List view puts "Audiobook ·" before the status.
+  - Shelf view adds a headphones glyph to the spine.
+  - The status filter has an **Audiobooks** entry, and search matches
+    "audiobook" and the narrator.
+- **Detail sheet.** No Lend button. It shows Format and Narrated by.
+- **CSV.** New `format` and `narrator` columns. Older exports import as books.
+
 ## Pick my next book
 
 Set the status filter to **To read** and a **Pick my next book** pill appears
@@ -534,6 +576,7 @@ Schema history:
 | v4 | the backup key moved to `clib.backupKey` and the server URL into the code. Migrates an existing key out of the settings blob, and strips the stray `backupUrl`/`backupKey` properties on the way past. |
 | v4 (Oct 2026, no bump) | added `dateFinished` (`YYYY-MM-DD` or `''`) to the book record, plus a `dateFinished` CSV column. Nothing to migrate: older records and CSVs normalise to `''`. Choosing **Read** in the editor offers today's date; the field is editable and may be left blank. The date is kept if a book moves off Read. |
 | v4 (Oct 2026, no bump) | added loans: `loanTo` (name or `''`), `loanDate` (`YYYY-MM-DD`, cleared when nobody has it) and `loanHistory` (`[{to, from, back}]`, oldest first), plus `loanTo`/`loanDate` CSV columns. History travels in the JSON backup only. Nothing to migrate: older records normalise to an empty loan. |
+| v4 (Oct 2026, no bump) | added audiobooks: `format` (`'book'` or `'audio'`) and `narrator` (audio only), plus `format`/`narrator` CSV columns. Nothing to migrate: older records normalise to `'book'`. |
 
 Changing a value in `DEFAULT_SETTINGS` alone never reaches an existing install
 — settings are persisted on first run, so the stored blob always wins. A
