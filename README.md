@@ -310,11 +310,13 @@ land at 4.3:1 and fail.
 
   Tested on a drawn shelf of three barcodes: the old code read the left-hand
   neighbour, and the new one reads the middle book.
-- **A miss offers the other ways in (v22).** When Scan finds nothing, or rapid
-  mode has read nothing for 9 s, a panel over the camera offers **Type the
-  ISBN** and **Search by title**. A lookup that Open Library has no record for
-  offers **Search by title** too, because the book is often listed under
-  another edition's ISBN.
+- **Manual search (v23).** The Scan screen's second button, once "Type ISBN",
+  is **Manual search**. It opens a sheet with both ways in: **By ISBN** and
+  **By title or author**. An ISBN typed there goes through the same Add /
+  Accept card a scanned one does. A scan that misses shows a short "No barcode
+  found." under the box, which clears itself after 2.5 s. v22's help panel
+  covered the box, so it is gone. A lookup that Open Library has no record for
+  still offers **Search by title** on its card.
 - **Two scan modes, both confirmed.** Nothing is ever recorded from a barcode
   alone. *One at a time* does not decode at all until you tap **Scan**, then
   shows the book and adds it to the library on **Add**. *Rapid* reads

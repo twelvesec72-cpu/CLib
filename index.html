@@ -517,14 +517,6 @@ label.field > span{display:block; font-size:13px; font-weight:650; color:var(--m
   background:rgba(0,0,0,.66); color:#fff; font-size:13.5px; text-align:center;
 }
 .scanwrap.has-shutter .status{bottom:78px}
-.misshelp{
-  position:absolute; left:10px; right:10px; bottom:10px; padding:10px 12px 12px; border-radius:11px;
-  background:rgba(0,0,0,.72); color:#fff; text-align:center;
-}
-.scanwrap.has-shutter .misshelp{bottom:78px}
-.misshelp p{margin:0 0 9px; font-size:13.5px}
-.misshelp .acts{display:flex; gap:8px}
-.misshelp .btn{flex:1; min-width:0}
 .shutter{
   position:absolute; left:50%; bottom:14px; transform:translateX(-50%);
   min-height:52px; padding:0 26px; border:0; border-radius:26px;
@@ -748,13 +740,6 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M13 2L4.5 13H11l-1 9 8.5-11H12l1-9z"/></svg>
       </button>
       <div class="status" id="scanStatus">Camera off</div>
-      <div class="misshelp hide" id="missHelp" role="alert">
-        <p id="missMsg"></p>
-        <div class="acts">
-          <button class="btn sm" id="missIsbn">Type the ISBN</button>
-          <button class="btn sm" id="missTitle">Search by title</button>
-        </div>
-      </div>
       <button class="shutter hide" id="btnShoot">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M3 8V5.5A1.5 1.5 0 014.5 4H7M17 4h2.5A1.5 1.5 0 0121 5.5V8M21 16v2.5a1.5 1.5 0 01-1.5 1.5H17M7 20H4.5A1.5 1.5 0 013 18.5V16"/><path d="M7 8v8M10 8v8M13.5 8v8M17 8v8" stroke-width="1.6"/></svg>
         Scan
@@ -763,7 +748,7 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
     </div>
     <div class="row" style="margin-bottom:12px">
       <button class="btn primary" id="btnScanToggle">Start camera</button>
-      <button class="btn" id="btnTypeIsbn">Type ISBN</button>
+      <button class="btn" id="btnTypeIsbn">Manual search</button>
     </div>
     <p class="hint" id="scanEngine"></p>
   </section>
@@ -2348,8 +2333,12 @@ function openEditor(book){
 }
 
 /* ---------------------------------------------------------- manual add */
-function openManualAdd(){
-  openSheet('Add a book',
+/* Also the Scan screen's "Manual search", with `onIsbn` set: an ISBN typed
+   there goes through the same Add / Accept card a scanned one does (which
+   handles duplicates itself), rather than straight into the editor. */
+function openManualAdd(opts){
+  opts = opts || {};
+  openSheet(opts.title || 'Add a book',
     '<div class="card"><h3>By ISBN</h3>' +
       '<div class="row"><input type="text" id="mIsbn" inputmode="numeric" aria-label="ISBN" placeholder="9780441013593" autocomplete="off">' +
       '<button class="btn primary" id="mIsbnGo" style="flex:none">Look up</button></div></div>' +
@@ -2361,9 +2350,11 @@ function openManualAdd(){
     '<button class="btn wide" id="mByHand">Enter everything by hand</button>');
 
   $('#mByHand').onclick = () => openEditor(null);
+  $('#mIsbn').addEventListener('keydown', e => { if(e.key === 'Enter') $('#mIsbnGo').click(); });
   $('#mIsbnGo').onclick = async () => {
     const n = normaliseIsbn($('#mIsbn').value);
     if(!n){ fieldError($('#mIsbn'), 'That is not a valid ISBN-10 or ISBN-13.'); return; }
+    if(opts.onIsbn){ closeSheet(); opts.onIsbn(n.isbn13); return; }
     const dupe = findByIsbn(n.isbn13);
     if(dupe){ fieldError($('#mIsbn'), 'You already have “' + dupe.title + '”.'); return; }
     const busy = busyToast('Looking up ' + n.isbn13 + '…');
@@ -2575,7 +2566,7 @@ function stallHint(){
   if(scan.hinted || scan.gotAny || scan.paused || !scan.startedAt) return;
   if(Date.now() - scan.startedAt < 9000) return;
   scan.hinted = true;
-  showMissHelp('No barcode yet — more light, fill the white box, hold still.');
+  setScanStatus('No barcode yet — more light, fill the white box, hold still. Or tap Manual search.');
 }
 
 async function startScan(){
@@ -2641,7 +2632,7 @@ async function startScan(){
     if(name === 'NotAllowedError' || name === 'SecurityError'){
       if(settings.cameraOk){ settings.cameraOk = false; saveSettings(); }
       setScanStatus('Camera permission denied.');
-      toast('Camera permission was refused. Allow it in your browser settings, or type the ISBN.', 'err', 7000);
+      toast('Camera permission was refused. Allow it in your browser settings, or use Manual search.', 'err', 7000);
     }else if(name === 'NotFoundError' || name === 'OverconstrainedError'){
       setScanStatus('No usable camera found.');
     }else{
@@ -2676,7 +2667,6 @@ function applyScanMode(){
   $('#scanwrap').classList.toggle('has-shutter', showShutter);
 
   if(scan.timer){ clearTimeout(scan.timer); scan.timer = null; }
-  hideMissHelp();
   if(scan.running && !manual){
     runTicks(scan.engine === 'native' ? nativeTick : zxingTick,
              scan.engine === 'native' ? 170 : 90);
@@ -2710,7 +2700,6 @@ async function shoot(){
   btn.innerHTML = '<span class="spinner"></span> Reading…';
   setScanStatus(' ');          // the button already says it; don't say it twice
 
-  hideMissHelp();
   // The same code twice running before it counts, as in rapid mode. If the
   // time runs out on a single read that nothing contradicted, that one is
   // taken: a slow phone may only manage one, and it was the nearest the box.
@@ -2735,21 +2724,14 @@ async function shoot(){
     scan.lastCode = ''; scan.lastAt = 0;   // a deliberate tap is never a repeat
     onCode(found);
   }else{
-    showMissHelp(mixed ? 'Two barcodes in view — get just the one in the box.'
-                       : 'No barcode found — fill the box, add light, try again.');
+    // A short line under the box that clears itself, so it is never in the
+    // way of the next try. Manual search, under the camera, is the way out.
+    const msg = mixed ? 'Two barcodes in view — just the one in the box.' : 'No barcode found.';
+    setScanStatus(msg);
+    setTimeout(() => { if($('#scanStatus').textContent === msg) setScanStatus(''); }, 2500);
     haptic('miss');
   }
 }
-/* A scan that finds nothing is exactly when people need the other two ways
-   in, and they were easy to miss (Type ISBN sits under the camera, title
-   search behind the + on the Library). So offer both right there. */
-function showMissHelp(msg){
-  setScanStatus('');
-  const el = $('#missHelp');
-  $('#missMsg').textContent = msg;
-  el.classList.remove('hide');
-}
-function hideMissHelp(){ $('#missHelp').classList.add('hide'); }
 function openTitleSearch(){
   openManualAdd();
   $('#mTitle').focus();
@@ -2821,7 +2803,6 @@ function onCode(raw){
   if(!validEan13(code)){ setScanStatus('Unreadable barcode — try again.'); return; }
   if(!isBookland(code)){ setScanStatus(code + ' is not a book barcode.'); return; }
   scan.lastCode = code; scan.lastAt = now;
-  hideMissHelp();
   beep();
   if(settings.scanMode === 'rapid') handleRapid(code);
   else handleConfirm(code);
@@ -3781,7 +3762,7 @@ function showView(name){
   $('#topTitle').firstChild.nodeValue =
     ({ library:'Library ', scan:'Scan ', review:'Review ', settings:'Settings ' })[name];
   $('#bookCount').classList.toggle('hide', name !== 'library');
-  // Scan has its own Type ISBN button, and Settings adds nothing
+  // Scan has its own Manual search button, and Settings adds nothing
   $('#btnAdd').classList.toggle('hide', name === 'settings' || name === 'scan');
 
   if(name !== 'scan' && scan.running) stopScan();
@@ -3827,23 +3808,10 @@ function wireUp(){
   $('#modeRapid').onclick   = () => setMode('rapid');
   $('#btnScanToggle').onclick = () => { if(scan.running){ stopScan(); } else { primeAudio(); startScan(); } };
   $('#btnShoot').onclick = () => shoot();
-  $('#missIsbn').onclick  = () => { hideMissHelp(); $('#btnTypeIsbn').click(); };
-  $('#missTitle').onclick = () => { hideMissHelp(); openTitleSearch(); };
-  $('#btnTypeIsbn').onclick = () => {
-    openSheet('Type an ISBN',
-      '<label class="field"><span>ISBN-10 or ISBN-13</span>' +
-      '<input type="text" id="tIsbn" inputmode="numeric" autocomplete="off" enterkeyhint="go" placeholder="9780441013593"></label>' +
-      '<button class="btn primary wide" id="tGo">Look up</button>');
-    $('#tIsbn').focus();
-    $('#tIsbn').addEventListener('keydown', e => { if(e.key === 'Enter') $('#tGo').click(); });
-    $('#tGo').onclick = () => {
-      const n = normaliseIsbn($('#tIsbn').value);
-      if(!n){ fieldError($('#tIsbn'), 'That is not a valid ISBN-10 or ISBN-13.'); return; }
-      closeSheet();
-      if(settings.scanMode === 'rapid') handleRapid(n.isbn13);
-      else handleConfirm(n.isbn13);
-    };
-  };
+  $('#btnTypeIsbn').onclick = () => openManualAdd({
+    title:'Manual search',
+    onIsbn: isbn13 => settings.scanMode === 'rapid' ? handleRapid(isbn13) : handleConfirm(isbn13)
+  });
 
   $('#btnAddColl').onclick = () => {
     const n = $('#newColl').value.trim();
