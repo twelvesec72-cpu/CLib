@@ -263,6 +263,15 @@ main{
 }
 .tabbar button[aria-current="page"]{color:var(--accent-ink)}
 .tabbar svg{width:23px;height:23px}
+/* Scan, the middle button: outlined in the accent so it reads as the main
+   action from any screen, and filled in while you are on it. The box is
+   drawn behind the icon and label, inset so neighbours keep their spacing. */
+.tabbar .tab-scan{color:var(--accent-ink)}
+.tabbar .tab-scan::before{content:""; position:absolute; inset:4px 6px 5px; z-index:-1;
+  border:2px solid var(--accent); border-radius:13px; background:var(--accent-soft)}
+.tabbar .tab-scan[aria-current="page"]::before{background:var(--accent)}
+.tabbar .tab-scan[aria-current="page"]{color:var(--on-accent)}
+.tabbar button{isolation:isolate}
 .tabbar .badge{
   position:absolute; top:3px; left:calc(50% + 7px);
   min-width:17px; height:17px; padding:0 4px; border-radius:9px;
@@ -841,14 +850,15 @@ dl.facts dd{margin:0; overflow-wrap:anywhere}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M4 4.5A1.5 1.5 0 015.5 3H9v18H5.5A1.5 1.5 0 014 19.5z"/><path d="M9 3h4.5A1.5 1.5 0 0115 4.5v15a1.5 1.5 0 01-1.5 1.5H9z"/><path d="M16.4 4.2l2.6-.6a1 1 0 011.2.8l3 14.2a1 1 0 01-.8 1.2l-2.6.6"/></svg>
     Library
   </button>
-  <button data-view="scan">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M3 8V5.5A1.5 1.5 0 014.5 4H7M17 4h2.5A1.5 1.5 0 0121 5.5V8M21 16v2.5a1.5 1.5 0 01-1.5 1.5H17M7 20H4.5A1.5 1.5 0 013 18.5V16"/><path d="M7 8v8M10 8v8M13.5 8v8M17 8v8" stroke-width="1.6"/></svg>
-    Scan
-  </button>
   <!-- not a screen: it opens the "Add an audiobook" sheet over whichever one is up -->
   <button data-action="audio" aria-label="Add an audiobook">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v-3a8 8 0 0116 0v3"/><rect x="3" y="14" width="5" height="7" rx="1.6"/><rect x="16" y="14" width="5" height="7" rx="1.6"/></svg>
     Audio
+  </button>
+  <!-- the main way books get in, so it sits in the middle in a box of its own -->
+  <button data-view="scan" class="tab-scan">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M3 8V5.5A1.5 1.5 0 014.5 4H7M17 4h2.5A1.5 1.5 0 0121 5.5V8M21 16v2.5a1.5 1.5 0 01-1.5 1.5H17M7 20H4.5A1.5 1.5 0 013 18.5V16"/><path d="M7 8v8M10 8v8M13.5 8v8M17 8v8" stroke-width="1.6"/></svg>
+    Scan
   </button>
   <button data-view="review">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 12h10M4 18h7"/><path d="M15.5 17.5l2 2 4-4.5"/></svg>

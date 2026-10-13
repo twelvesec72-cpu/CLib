@@ -107,6 +107,16 @@ A loan is a name and a day, nothing more.
   cover. In list view, "Lent to Sarah" replaces the status word. Every view's
   accessible label includes it.
 
+## Bottom bar (v25)
+
+The bar reads **Library · Audio · Scan · Review · Settings**. Scan is the main
+way books get in, so it sits in the middle:
+- an accent-outlined box, filled pale accent, on every screen;
+- a solid accent box while you're on the Scan screen.
+
+The box is the tab's own `::before`, inset 4–6 px, so the five columns keep
+their even spacing. It fits at 360 px.
+
 ## Audiobooks (v24)
 
 The **Audio** button in the bottom bar (headphones icon) opens **Add an
