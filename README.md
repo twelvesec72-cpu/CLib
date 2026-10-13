@@ -292,9 +292,29 @@ land at 4.3:1 and fail.
   reschedules itself for three specific exception types — any other throw (such
   as a frame arriving before iOS reports `videoWidth`) stops it permanently and
   silently. Instead there is a self-scheduling loop that never overlaps, and
-  frames are downscaled to 760 px, alternating the centre band with the whole
-  frame. Measured on the same machine: 62 ms → 27 ms per empty frame, and
-  15 ms → 3 ms when a barcode is actually present.
+  frames are downscaled to 760 px, cycling through three crops: the middle
+  half, the middle three-quarters, and the whole frame. Measured on the same
+  machine: 62 ms → 27 ms per empty frame, and 15 ms → 3 ms when a barcode is
+  actually present.
+- **It reads the book in the box, not its neighbour (v22).** With books side by
+  side, the scanner used to take the first barcode it found anywhere in the
+  frame, which was often the next book's. Now:
+  - The built-in detector reports every barcode, and the one nearest the middle
+    of the picture wins.
+  - ZXing reports only one, so the crops narrow side to side to cut the
+    neighbours out. On a whole-frame pass, a code well outside the box is
+    thrown away.
+  - A code counts only once it has read the same twice running. The Scan
+    button settles for one read when time runs out, but only if nothing
+    contradicted it. If two different codes were seen, it says so.
+
+  Tested on a drawn shelf of three barcodes: the old code read the left-hand
+  neighbour, and the new one reads the middle book.
+- **A miss offers the other ways in (v22).** When Scan finds nothing, or rapid
+  mode has read nothing for 9 s, a panel over the camera offers **Type the
+  ISBN** and **Search by title**. A lookup that Open Library has no record for
+  offers **Search by title** too, because the book is often listed under
+  another edition's ISBN.
 - **Two scan modes, both confirmed.** Nothing is ever recorded from a barcode
   alone. *One at a time* does not decode at all until you tap **Scan**, then
   shows the book and adds it to the library on **Add**. *Rapid* reads
@@ -308,11 +328,33 @@ land at 4.3:1 and fail.
   in the review queue — you cannot commit a book you never actually saw.
   Duplicates are caught locally and appear on the card instantly, so accepting
   one is always a deliberate choice and stays ticked.
-- **Metadata.** Open Library, no API key. Three endpoints are tried in order:
-  `/api/books`, `/isbn/{isbn}.json`, then `/search.json?q=isbn:`. Each is
-  optional — an HTTP error from one is treated as a miss and the chain
-  continues; only a total loss of contact raises an error. (`/api/books` has
-  been answering 404 for valid ISBNs, which is why the chain does not trust it.)
+- **Metadata.** Open Library, no API key, three endpoints.
+  - `/api/books` and `/isbn/{isbn}.json` are asked at once, and
+    `/search.json?q=isbn:` when needed.
+  - Each is optional: an HTTP error from one counts as a miss and the chain
+    goes on. Only a total loss of contact raises an error. (`/api/books` has
+    been answering 404 for valid ISBNs, which is why the chain doesn't trust it.)
+  - If `/api/books` names a different edition than `/isbn/` does, `/isbn/` wins.
+    Two records can claim one ISBN: the US hardback of *The Sword of Summer*
+    (9781423160915) came back from `/api/books` as its Polish translation.
+- **English first (v22).** The library is English-language books.
+  - **Scanned translation.** When the edition record is marked as another
+    language, the book is shown under its work's English title, authors,
+    series and cover, taken from search. The ISBN, publisher and page count
+    still come from the edition, because they describe the copy in hand. A
+    Polish *Miecz Lata* (9788364297564) comes in as *The Sword of Summer*.
+  - **No language on record.** The edition is taken as it is, because plenty
+    of English editions have none. The `/isbn/` rule above covers the
+    mis-filed ones.
+  - **Title search.** It asks Open Library with `lang=en`. From the ISBNs a
+    work lists, it picks one in the English-language registration groups
+    (978-0, 978-1, 979-8) rather than whichever comes first.
+- **Which cover (v22).** The edition's own cover comes first. Then the work's
+  shared cover from search, which often exists when the edition has none.
+  The ISBN cover URL is the last guess. Until v22 the shared cover was never
+  reached: `coverFor(isbn, id)` always returns the ISBN URL, so the `||` chain
+  stopped there and showed a blank. The UK *Sword of Summer* (9780141342443)
+  now gets a cover.
 - **Covers.** For a looked-up cover only the URL is stored, never the image,
   which keeps a few thousand books inside the ~5 MB `localStorage` quota. They
   are cached by the service worker so the library still looks right offline. A
